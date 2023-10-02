@@ -155,14 +155,21 @@ pub trait ShouldEndSession<BlockNumber> {
 pub struct PeriodicSessions<Period, Offset>(PhantomData<(Period, Offset)>);
 
 impl<
-		BlockNumber: Rem<Output = BlockNumber> + Sub<Output = BlockNumber> + Zero + PartialOrd,
+		BlockNumber: Rem<Output = BlockNumber>
+			+ Sub<Output = BlockNumber>
+			+ Zero
+			+ PartialOrd
+			+ core::fmt::Debug,
 		Period: Get<BlockNumber>,
 		Offset: Get<BlockNumber>,
 	> ShouldEndSession<BlockNumber> for PeriodicSessions<Period, Offset>
 {
 	fn should_end_session(now: BlockNumber) -> bool {
 		let offset = Offset::get();
-		now >= offset && ((now - offset) % Period::get()).is_zero()
+		log::debug!(target: "davxy::session", "SHOULD END SESSION? now = {:?}", now);
+		let res = now >= offset && ((now - offset) % Period::get()).is_zero();
+		log::debug!(target: "davxy::session", "   RES = {res}");
+		res
 	}
 }
 
@@ -643,6 +650,7 @@ impl<T: Config> Pallet<T> {
 
 		// Increment session index.
 		let session_index = session_index + 1;
+		log::debug!(target: "davxy::session", "Session Index: {}", session_index);
 		<CurrentIndex<T>>::put(session_index);
 
 		T::SessionManager::start_session(session_index);

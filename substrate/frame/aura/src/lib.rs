@@ -369,6 +369,7 @@ impl<T: Config> Pallet<T> {
 	/// The authorities length must be equal or less than T::MaxAuthorities.
 	pub fn initialize_authorities(authorities: &[T::AuthorityId]) {
 		if !authorities.is_empty() {
+			log::debug!(target: "davxy", "initialize authorities {}", authorities.len());
 			assert!(<Authorities<T>>::get().is_empty(), "Authorities are already initialized!");
 			let bounded = <BoundedSlice<'_, _, T::MaxAuthorities>>::try_from(authorities)
 				.expect("Initial authority set must be less than T::MaxAuthorities");
@@ -476,6 +477,7 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 	where
 		I: Iterator<Item = (&'a T::AccountId, T::AuthorityId)>,
 	{
+		log::debug!(target: "davxy", "on genesis session");
 		let authorities = validators.map(|(_, k)| k).collect::<Vec<_>>();
 		Self::initialize_authorities(&authorities);
 	}
@@ -484,6 +486,7 @@ impl<T: Config> OneSessionHandler<T::AccountId> for Pallet<T> {
 	where
 		I: Iterator<Item = (&'a T::AccountId, T::AuthorityId)>,
 	{
+		log::debug!(target: "davxy", "on new session {changed}");
 		// instant changes
 		if !changed {
 			return
