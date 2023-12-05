@@ -44,6 +44,9 @@ pub trait VerifiableApi {
 
 	#[method(name = "verifiable_create")]
 	fn create(&self, member: String, message: String) -> RpcResult<(String, String)>;
+
+	#[method(name = "verifiable_reset")]
+	fn reset(&self, member: Option<String>) -> RpcResult<()>;
 }
 
 type Seed = [u8; 32];
@@ -181,6 +184,28 @@ impl VerifiableApiServer for Verifiable {
 		log::debug!(target: LOG_TARGET, "Alias: {}", alias);
 
 		Ok((alias, proof))
+	}
+
+	fn reset(&self, member: Option<String>) -> RpcResult<()> {
+		let mut keymap = self.keymap.lock().unwrap();
+
+		let Some(member) = member else {
+			log::debug!(target: LOG_TARGET, "Flushing everything");
+			keymap.clear();
+			return Ok(())
+		};
+
+		let raw_member =
+			to_raw_member(member).map_err(|e| my_err(e, format!("Decoding input member")))?;
+
+		if let None = keymap.remove(&raw_member) {
+			log::warn!(target: LOG_TARGET, "Member not found");
+			return Err(my_err(Error::MemberNotFound, "Member no found".into()).into())
+		};
+
+		log::debug!(target: LOG_TARGET, "Flushed data for member");
+
+		Ok(())
 	}
 }
 
