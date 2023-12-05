@@ -16,14 +16,12 @@ use sp_std::vec::Vec;
 use verifiable::{
 	ring_vrf_impl::{
 		bandersnatch_vrfs::ring::KZG, fflonk::pcs::PcsParams, ring::ring::RingBuilderKey,
-		RingVrfVerifiable,
+		RingVrfVerifiable, DOMAIN_SIZE,
 	},
 	GenerateVerifiable,
 };
 
 const LOG_TARGET: &str = "verifiable 🛡";
-
-const DOMAIN_SIZE: usize = 1 << 9;
 
 const SRS_MAX_CHUNKS: u32 = DOMAIN_SIZE as u32;
 
@@ -42,9 +40,7 @@ pub mod pallet {
 	pub struct Pallet<T>(_);
 
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
-		type DomainSize: Get<u32>;
-	}
+	pub trait Config: frame_system::Config {}
 
 	#[pallet::error]
 	pub enum Error<T> {

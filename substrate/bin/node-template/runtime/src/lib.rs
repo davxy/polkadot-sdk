@@ -282,9 +282,7 @@ impl pallet_template::Config for Runtime {
 	type WeightInfo = pallet_template::weights::SubstrateWeight<Runtime>;
 }
 
-impl pallet_verifiable::Config for Runtime {
-	type DomainSize = ConstU32<512>;
-}
+impl pallet_verifiable::Config for Runtime {}
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
