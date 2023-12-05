@@ -17,7 +17,7 @@ use verifiable::{
 	GenerateVerifiable,
 };
 
-const LOG_TARGET: &str = "verifiable";
+const LOG_TARGET: &str = "verifiable 🛡";
 
 const DOMAIN_SIZE: usize = 1 << 9;
 

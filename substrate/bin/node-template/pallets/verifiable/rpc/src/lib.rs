@@ -19,9 +19,9 @@
 
 // use codec::{Codec, Decode};
 use jsonrpsee::{
-	core::{Error as JsonRpseeError, RpcResult},
+	core::RpcResult,
 	proc_macros::rpc,
-	types::error::{CallError, ErrorCode, ErrorObject},
+	types::error::{CallError, ErrorObject},
 };
 use std::{
 	collections::{hash_map::Entry, HashMap},
@@ -32,7 +32,7 @@ use verifiable::{
 	GenerateVerifiable,
 };
 
-const LOG_TARGET: &str = "verifiable:rpc";
+const LOG_TARGET: &str = "verifiable:rpc 🛡";
 
 #[rpc(client, server)]
 pub trait VerifiableApi {
@@ -41,6 +41,9 @@ pub trait VerifiableApi {
 
 	#[method(name = "verifiable_open")]
 	fn open(&self, member: String) -> RpcResult<()>;
+
+	#[method(name = "verifiable_create")]
+	fn create(&self, member: String, message: String) -> RpcResult<(String, String)>;
 }
 
 type Seed = [u8; 32];
@@ -62,8 +65,12 @@ impl Verifiable {
 }
 
 pub enum Error {
-	DecodeError,
-	EncodeError,
+	Decode,
+	Encode,
+	MemberNotFound,
+	CommitNotFound,
+	Commitment,
+	Proof,
 }
 
 fn my_err(e: Error, msg: String) -> CallError {
@@ -87,7 +94,7 @@ impl VerifiableApiServer for Verifiable {
 		member
 			.0
 			.serialize_compressed(raw_public.as_mut_slice())
-			.map_err(|e| my_err(Error::EncodeError, e.to_string()))?;
+			.map_err(|e| my_err(Error::Encode, e.to_string()))?;
 
 		let member = hex::encode(raw_public).to_string();
 		log::debug!(target: LOG_TARGET, "  member: 0x{}", member);
@@ -100,7 +107,7 @@ impl VerifiableApiServer for Verifiable {
 		Ok(member)
 	}
 
-	// This should be called when we know the entire ring
+	// This should be called when the ring is finalized
 	fn open(&self, member: String) -> RpcResult<()> {
 		use verifiable::ring_vrf_impl::bandersnatch_vrfs::PublicKey;
 
@@ -115,31 +122,23 @@ impl VerifiableApiServer for Verifiable {
 			})
 			.collect();
 
-		let raw_member = hex::decode(member).map_err(|e| {
-			log::error!(target: LOG_TARGET, "Error decoding input element (bad hex)");
-			my_err(
-				Error::DecodeError,
-				format!("Decoding input element (bad hex): {}", e.to_string()),
-			)
-		})?;
+		let raw_member =
+			to_raw_member(member).map_err(|e| my_err(e, format!("Decoding input member")))?;
 
 		let member = PublicKey::deserialize_compressed(raw_member.as_slice()).map_err(|e| {
 			log::error!(target: LOG_TARGET, "Error decoding input element");
-			my_err(Error::DecodeError, format!("Decoding input element: {}", e.to_string()))
+			my_err(Error::Decode, format!("Decoding input element: {}", e.to_string()))
 		})?;
 
-		// Now we can safery assume 33 bytes
-		let mut map_key = [0u8; 33];
-		map_key.copy_from_slice(raw_member.as_slice());
-		let Entry::Occupied(mut member_entry) = keymap.entry(map_key) else {
+		let Entry::Occupied(mut member_entry) = keymap.entry(raw_member) else {
 			log::error!(target: LOG_TARGET, "Member not found");
-			return Err(my_err(Error::DecodeError, "Member no found".into()).into())
+			return Err(my_err(Error::MemberNotFound, "Member no found".into()).into())
 		};
 
 		let commitment =
 			RingVrfVerifiable::open(&member.into(), members.into_iter()).map_err(|_| {
 				log::error!(target: LOG_TARGET, "Error generating commitment");
-				my_err(Error::DecodeError, "Generating commitment".to_string())
+				my_err(Error::Commitment, "Generating commitment".to_string())
 			})?;
 
 		member_entry.get_mut().commitment = Some(commitment);
@@ -148,4 +147,56 @@ impl VerifiableApiServer for Verifiable {
 
 		Ok(())
 	}
+
+	fn create(&self, member: String, message: String) -> RpcResult<(String, String)> {
+		let mut keymap = self.keymap.lock().unwrap();
+
+		let raw_member =
+			to_raw_member(member).map_err(|e| my_err(e, format!("Decoding input member")))?;
+
+		let Entry::Occupied(mut member_entry) = keymap.entry(raw_member) else {
+			log::error!(target: LOG_TARGET, "Member not found");
+			return Err(my_err(Error::MemberNotFound, "Member no found".into()).into())
+		};
+
+		let Some(commitment) = member_entry.get_mut().commitment.take() else {
+			log::error!(target: LOG_TARGET, "Member commitment not found");
+			return Err(my_err(Error::CommitNotFound, "Member commitment no found".into()).into())
+		};
+
+		let seed = member_entry.get().seed;
+		let secret = RingVrfVerifiable::new_secret(seed);
+
+		let (proof, alias) =
+			RingVrfVerifiable::create(commitment, &secret, b"VerfiablePoC", message.as_bytes())
+				.map_err(|_| {
+					log::error!(target: LOG_TARGET, "Error generating proof");
+					my_err(Error::Proof, "Generating proof".to_string())
+				})?;
+
+		let alias = hex::encode(alias);
+		let proof = hex::encode(proof);
+		log::debug!(target: LOG_TARGET, ">>> Proof: {}", proof);
+		log::debug!(target: LOG_TARGET, ">>> Alias: {}", alias);
+
+		let proof = "asd".to_string();
+
+		Ok((alias, proof))
+	}
+}
+
+fn to_raw_member(member: String) -> Result<RawMember, Error> {
+	let bytes = hex::decode(member).map_err(|_| {
+		log::error!(target: LOG_TARGET, "Error decoding member (bad hex)");
+		Error::Decode
+	})?;
+
+	if bytes.len() != 33 {
+		log::error!(target: LOG_TARGET, "Error decoding member element (bad length)");
+		return Err(Error::Decode)
+	}
+
+	let mut raw_member = [0u8; 33];
+	raw_member.copy_from_slice(bytes.as_slice());
+	Ok(raw_member)
 }

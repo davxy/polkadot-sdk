@@ -5,6 +5,7 @@ function help() {
   echo "  Commands:"
   echo "  * keygen <phrase> : generate a new member keypair derived from <phrase>"
   echo "  * open <member> : generate a commitment for <member>"
+  echo "  * create <member> : generate a commitment for <member>"
   exit
 }
 
@@ -30,12 +31,27 @@ function open() {
        http://localhost:9944
 }
 
+function create() {
+  member=$1
+  if [[ $member == "" ]]; then
+    help
+  fi
+  message="hello"
+  echo "Generating proof for member: $member"
+  curl -H "Content-Type: application/json" \
+       -d "{\"id\":1, \"jsonrpc\":\"2.0\", \"method\":\"verifiable_create\", \"params\":[\"$member\", \"$message\"]}" \
+       http://localhost:9944
+}
+
 case $1 in
   "keygen")
     keygen $2
     ;;
   "open")
     open $2
+    ;;
+  "create")
+    create $2
     ;;
   *)
     help
