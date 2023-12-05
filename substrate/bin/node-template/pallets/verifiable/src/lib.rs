@@ -45,8 +45,10 @@ pub mod pallet {
 	#[pallet::error]
 	pub enum Error<T> {
 		RingNotInitialized,
+		RingNotFinalized,
 		PushMemberFailure,
 		RingFinalized,
+		ValidationFailure,
 	}
 
 	#[pallet::storage]
@@ -135,6 +137,34 @@ pub mod pallet {
 
 			Members::<T>::kill();
 			Self::make_empty_ring();
+
+			Ok(())
+		}
+
+		#[pallet::call_index(3)]
+		#[pallet::weight(0)]
+		pub fn validate_proof(
+			origin: OriginFor<T>,
+			proof: <RingVrfVerifiable as GenerateVerifiable>::Proof,
+			message: String,
+		) -> DispatchResult {
+			let _who = ensure_signed(origin)?;
+
+			log::debug!("Validating: {}", hex::encode(proof));
+
+			let Some(members) = Members::<T>::get() else {
+				log::error!(target: LOG_TARGET, "Ring not finalized");
+				return Err(Error::<T>::RingNotFinalized.into())
+			};
+
+			let Ok(alias) =
+				RingVrfVerifiable::validate(&proof, &members, b"VerfiablePoC", message.as_bytes())
+			else {
+				log::error!(target: LOG_TARGET, "Validation failure");
+				return Err(Error::<T>::ValidationFailure.into())
+			};
+
+			log::debug!("Validated alias: {}", hex::encode(alias));
 
 			Ok(())
 		}

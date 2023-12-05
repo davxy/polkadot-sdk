@@ -176,10 +176,8 @@ impl VerifiableApiServer for Verifiable {
 
 		let alias = hex::encode(alias);
 		let proof = hex::encode(proof);
-		log::debug!(target: LOG_TARGET, ">>> Proof: {}", proof);
-		log::debug!(target: LOG_TARGET, ">>> Alias: {}", alias);
-
-		let proof = "asd".to_string();
+		log::debug!(target: LOG_TARGET, "Proof: {}", proof);
+		log::debug!(target: LOG_TARGET, "Alias: {}", alias);
 
 		Ok((alias, proof))
 	}
