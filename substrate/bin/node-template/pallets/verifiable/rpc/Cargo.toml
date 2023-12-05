@@ -21,5 +21,4 @@ sp-core = { path = "../../../../../primitives/core" }
 sp-rpc = { path = "../../../../../primitives/rpc" }
 sp-runtime = { path = "../../../../../primitives/runtime" }
 sp-weights = { path = "../../../../../primitives/weights" }
-# verifiable = { git = "https://github.com/davxy/verifiable", branch = "bandersnatch-vrf-impl" }
-verifiable = { path = "/mnt/ssd/develop/parity/verifiable/verifiable-upstream" }
+verifiable = { git = "https://github.com/davxy/verifiable", branch = "bandersnatch-vrf-impl", features = ["small-domain"] }
