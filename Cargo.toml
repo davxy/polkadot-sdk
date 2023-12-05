@@ -194,6 +194,7 @@ members = [
 	"substrate/bin/node-template/node",
 	"substrate/bin/node-template/pallets/template",
 	"substrate/bin/node-template/pallets/verifiable",
+	"substrate/bin/node-template/pallets/verifiable/rpc",
 	"substrate/bin/node-template/runtime",
 	"substrate/bin/node/bench",
 	"substrate/bin/node/cli",

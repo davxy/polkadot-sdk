@@ -1,0 +1,25 @@
+[package]
+name = "pallet-verifiable-rpc"
+version = "0.1.0"
+description = "RPC interface for the verifiable pallet PoC."
+authors = ["Davide Galassi <davxy@datawok.net>"]
+edition.workspace = true
+license = "MIT"
+publish = false
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+codec = { package = "parity-scale-codec", version = "3.6.5" }
+hex = "0.4.3"
+jsonrpsee = { version = "0.16.2", features = ["client-core", "macros", "server"] }
+log = "0.4.20"
+sp-api = { path = "../../../../../primitives/api" }
+sp-blockchain = { path = "../../../../../primitives/blockchain" }
+sp-core = { path = "../../../../../primitives/core" }
+sp-rpc = { path = "../../../../../primitives/rpc" }
+sp-runtime = { path = "../../../../../primitives/runtime" }
+sp-weights = { path = "../../../../../primitives/weights" }
+# verifiable = { git = "https://github.com/davxy/verifiable", branch = "bandersnatch-vrf-impl" }
+verifiable = { path = "/mnt/ssd/develop/parity/verifiable/verifiable-upstream" }

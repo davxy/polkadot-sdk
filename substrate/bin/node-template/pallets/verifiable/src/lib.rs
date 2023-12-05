@@ -11,10 +11,8 @@ use frame_support::BoundedVec;
 use sp_std::vec::Vec;
 use verifiable::{
 	ring_vrf_impl::{
-		bandersnatch_vrfs::{bls12_381::G1Affine, ring::KZG},
-		fflonk::pcs::PcsParams,
-		ring::ring::RingBuilderKey,
-		BandersnatchVrfVerifiable,
+		bandersnatch_vrfs::ring::KZG, fflonk::pcs::PcsParams, ring::ring::RingBuilderKey,
+		RingVrfVerifiable,
 	},
 	GenerateVerifiable,
 };
@@ -31,7 +29,10 @@ pub mod pallet {
 	use frame_support::pallet_prelude::*;
 	use frame_system::pallet_prelude::*;
 
-	type SrsChunksVec = BoundedVec<ArkScale<G1Affine>, ConstU32<SRS_MAX_CHUNKS>>;
+	type SrsChunksVec = BoundedVec<
+		<RingVrfVerifiable as GenerateVerifiable>::StaticChunk,
+		ConstU32<SRS_MAX_CHUNKS>,
+	>;
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -49,14 +50,13 @@ pub mod pallet {
 	}
 
 	#[pallet::storage]
-	type Intermediate<T> =
-		StorageValue<_, <BandersnatchVrfVerifiable as GenerateVerifiable>::Intermediate>;
+	type Intermediate<T> = StorageValue<_, <RingVrfVerifiable as GenerateVerifiable>::Intermediate>;
 
 	#[pallet::storage]
 	type SrsChunks<T> = StorageValue<_, SrsChunksVec, ValueQuery>;
 
 	#[pallet::storage]
-	type Members<T> = StorageValue<_, <BandersnatchVrfVerifiable as GenerateVerifiable>::Members>;
+	type Members<T> = StorageValue<_, <RingVrfVerifiable as GenerateVerifiable>::Members>;
 
 	#[pallet::genesis_config]
 	#[derive(frame_support::DefaultNoBound)]
@@ -79,7 +79,7 @@ pub mod pallet {
 		#[pallet::weight(0)]
 		pub fn push_member(
 			origin: OriginFor<T>,
-			member: <BandersnatchVrfVerifiable as GenerateVerifiable>::Member,
+			member: <RingVrfVerifiable as GenerateVerifiable>::Member,
 		) -> DispatchResult {
 			let _who = ensure_signed(origin)?;
 
@@ -93,13 +93,13 @@ pub mod pallet {
 				return Err(Error::<T>::RingNotInitialized.into())
 			};
 
-			log::debug!(target: LOG_TARGET, "Adding member {}", intermediate.ring.curr_keys);
+			log::debug!(target: LOG_TARGET, "Adding member to index: {}", intermediate.ring.curr_keys);
 
 			let srs_chunks = SrsChunks::<T>::get();
 
 			let get_chunk = |i: usize| Ok(srs_chunks[i].clone());
 
-			BandersnatchVrfVerifiable::push_member(&mut intermediate, member, get_chunk)
+			RingVrfVerifiable::push_member(&mut intermediate, member, get_chunk)
 				.map_err(|_| Error::<T>::PushMemberFailure)?;
 			log::debug!(target: LOG_TARGET, "Done");
 
@@ -120,7 +120,7 @@ pub mod pallet {
 
 			log::debug!(target: LOG_TARGET, "Finalizing ring (members = {})", intermediate.ring.curr_keys);
 
-			let members = BandersnatchVrfVerifiable::finish_members(intermediate);
+			let members = RingVrfVerifiable::finish_members(intermediate);
 			Members::<T>::set(Some(members));
 
 			log::debug!(target: LOG_TARGET, "Done");
@@ -157,7 +157,7 @@ pub mod pallet {
 				Ok(chunks)
 			};
 			let intermediate =
-				BandersnatchVrfVerifiable::start_members(kzg.pcs_params.raw_vk(), get_chunks);
+				RingVrfVerifiable::start_members(kzg.pcs_params.raw_vk(), get_chunks);
 			Intermediate::<T>::set(Some(intermediate));
 
 			// Persist SRS chunks for later usage

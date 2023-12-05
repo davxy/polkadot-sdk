@@ -19,7 +19,8 @@ frame-system = { path = "../../../../frame/system", default-features = false }
 sp-std = { path = "../../../../primitives/std", default-features = false }
 log = { version = "0.4.20", default-features = false }
 ark-scale = { version = "0.0.11", default-features = false }
-verifiable = { git = "https://github.com/davxy/verifiable", branch = "bandersnatch-vrf-impl", default-features = false }
+# verifiable = { git = "https://github.com/davxy/verifiable", branch = "bandersnatch-vrf-impl", default-features = false }
+verifiable = { path = "/mnt/ssd/develop/parity/verifiable/verifiable-upstream", default-features = false }
 
 [dev-dependencies]
 sp-core = { path = "../../../../primitives/core" }

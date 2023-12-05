@@ -53,6 +53,7 @@ sp-block-builder = { path = "../../../primitives/block-builder" }
 sc-basic-authorship = { path = "../../../client/basic-authorship" }
 substrate-frame-rpc-system = { path = "../../../utils/frame/rpc/system" }
 pallet-transaction-payment-rpc = { path = "../../../frame/transaction-payment/rpc" }
+pallet-verifiable-rpc = { path = "../pallets/verifiable/rpc" }
 
 # These dependencies are used for runtime benchmarking
 frame-benchmarking = { path = "../../../frame/benchmarking" }
