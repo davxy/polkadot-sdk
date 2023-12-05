@@ -166,9 +166,10 @@ impl VerifiableApiServer for Verifiable {
 
 		let seed = member_entry.get().seed;
 		let secret = RingVrfVerifiable::new_secret(seed);
+		// TODO : check if public is equal to member
 
 		let (proof, alias) =
-			RingVrfVerifiable::create(commitment, &secret, b"VerfiablePoC", message.as_bytes())
+			RingVrfVerifiable::create(commitment, &secret, b"VERIFIABLE", message.as_bytes())
 				.map_err(|_| {
 					log::error!(target: LOG_TARGET, "Error generating proof");
 					my_err(Error::Proof, "Generating proof".to_string())

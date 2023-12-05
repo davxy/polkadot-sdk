@@ -6,6 +6,10 @@
 // Re-export pallet items so that they can be accessed from the crate namespace.
 pub use pallet::*;
 
+// I know... we should not do this. But this is handy for testing
+extern crate alloc;
+use alloc::string::String;
+
 use ark_scale::ArkScale;
 use frame_support::BoundedVec;
 use sp_std::vec::Vec;
@@ -150,7 +154,8 @@ pub mod pallet {
 		) -> DispatchResult {
 			let _who = ensure_signed(origin)?;
 
-			log::debug!("Validating: {}", hex::encode(proof));
+			log::debug!(target: LOG_TARGET, "Validating proof: {}", hex::encode(proof));
+			log::debug!(target: LOG_TARGET, "For message: {}", message);
 
 			let Some(members) = Members::<T>::get() else {
 				log::error!(target: LOG_TARGET, "Ring not finalized");
@@ -158,13 +163,13 @@ pub mod pallet {
 			};
 
 			let Ok(alias) =
-				RingVrfVerifiable::validate(&proof, &members, b"VerfiablePoC", message.as_bytes())
+				RingVrfVerifiable::validate(&proof, &members, b"VERIFIABLE", message.as_bytes())
 			else {
 				log::error!(target: LOG_TARGET, "Validation failure");
 				return Err(Error::<T>::ValidationFailure.into())
 			};
 
-			log::debug!("Validated alias: {}", hex::encode(alias));
+			log::debug!(target: LOG_TARGET, "Validated alias: {}", hex::encode(alias));
 
 			Ok(())
 		}

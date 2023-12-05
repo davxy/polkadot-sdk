@@ -5,7 +5,7 @@ function help() {
   echo "  Commands:"
   echo "  * keygen <phrase> : generate a new member keypair derived from <phrase>"
   echo "  * open <member> : generate a commitment for <member>"
-  echo "  * create <member> : generate a commitment for <member>"
+  echo "  * create <member> <message>: generate a commitment for <member> and <message>"
   exit
 }
 
@@ -17,7 +17,7 @@ function keygen() {
   echo "Generating key for secret phrase: $phrase"
   curl -H "Content-Type: application/json" \
        -d "{\"id\":1, \"jsonrpc\":\"2.0\", \"method\":\"verifiable_keygen\", \"params\":[\"$phrase\"]}" \
-       http://localhost:9944
+       http://localhost:9944 | jq
 }
 
 function open() {
@@ -28,19 +28,20 @@ function open() {
   echo "Generating commitment for member: $member"
   curl -H "Content-Type: application/json" \
        -d "{\"id\":1, \"jsonrpc\":\"2.0\", \"method\":\"verifiable_open\", \"params\":[\"$member\"]}" \
-       http://localhost:9944
+       http://localhost:9944 | jq
 }
 
 function create() {
   member=$1
-  if [[ $member == "" ]]; then
+  message=$2
+  if [[ $member == "" || $message == "" ]]; then
     help
   fi
-  message="hello"
   echo "Generating proof for member: $member"
+  echo "Message: $message"
   curl -H "Content-Type: application/json" \
        -d "{\"id\":1, \"jsonrpc\":\"2.0\", \"method\":\"verifiable_create\", \"params\":[\"$member\", \"$message\"]}" \
-       http://localhost:9944
+       http://localhost:9944 | jq
 }
 
 case $1 in
@@ -51,7 +52,7 @@ case $1 in
     open $2
     ;;
   "create")
-    create $2
+    create $2 $3
     ;;
   *)
     help
