@@ -193,6 +193,7 @@ members = [
 	"substrate/bin/minimal/runtime",
 	"substrate/bin/node-template/node",
 	"substrate/bin/node-template/pallets/template",
+	"substrate/bin/node-template/pallets/verifiable",
 	"substrate/bin/node-template/runtime",
 	"substrate/bin/node/bench",
 	"substrate/bin/node/cli",
@@ -547,3 +548,7 @@ wasmi = { opt-level = 3 }
 x25519-dalek = { opt-level = 3 }
 yamux = { opt-level = 3 }
 zeroize = { opt-level = 3 }
+
+# Fix for TypeInfo implementation for ArkScale.
+[patch.crates-io]
+ark-scale = { git = "https://github.com/w3f/ark-scale" }

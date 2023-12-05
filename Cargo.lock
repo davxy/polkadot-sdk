@@ -530,8 +530,7 @@ dependencies = [
 [[package]]
 name = "ark-scale"
 version = "0.0.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51bd73bb6ddb72630987d37fa963e99196896c0d0ea81b7c894567e74a2f83af"
+source = "git+https://github.com/w3f/ark-scale#138d035c287f10bb7cb824fc1cad1096ef8bd235"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -544,13 +543,28 @@ dependencies = [
 [[package]]
 name = "ark-secret-scalar"
 version = "0.0.2"
+source = "git+https://github.com/w3f/ring-vrf?branch=pub-kzg#c7bc92a77d36b41204d3ce95fecf80e7364e7783"
+dependencies = [
+ "ark-ec",
+ "ark-ff",
+ "ark-serialize",
+ "ark-std",
+ "ark-transcript 0.0.2 (git+https://github.com/w3f/ring-vrf?branch=pub-kzg)",
+ "digest 0.10.7",
+ "getrandom_or_panic",
+ "zeroize",
+]
+
+[[package]]
+name = "ark-secret-scalar"
+version = "0.0.2"
 source = "git+https://github.com/w3f/ring-vrf?rev=2019248#2019248785389b3246d55b1c3b0e9bdef4454cb7"
 dependencies = [
  "ark-ec",
  "ark-ff",
  "ark-serialize",
  "ark-std",
- "ark-transcript",
+ "ark-transcript 0.0.2 (git+https://github.com/w3f/ring-vrf?rev=2019248)",
  "digest 0.10.7",
  "getrandom_or_panic",
  "zeroize",
@@ -588,6 +602,19 @@ dependencies = [
  "num-traits",
  "rand 0.8.5",
  "rayon",
+]
+
+[[package]]
+name = "ark-transcript"
+version = "0.0.2"
+source = "git+https://github.com/w3f/ring-vrf?branch=pub-kzg#c7bc92a77d36b41204d3ce95fecf80e7364e7783"
+dependencies = [
+ "ark-ff",
+ "ark-serialize",
+ "ark-std",
+ "digest 0.10.7",
+ "rand_core 0.6.4",
+ "sha3",
 ]
 
 [[package]]
@@ -1225,6 +1252,27 @@ dependencies = [
 [[package]]
 name = "bandersnatch_vrfs"
 version = "0.0.4"
+source = "git+https://github.com/w3f/ring-vrf?branch=pub-kzg#c7bc92a77d36b41204d3ce95fecf80e7364e7783"
+dependencies = [
+ "ark-bls12-381",
+ "ark-ec",
+ "ark-ed-on-bls12-381-bandersnatch",
+ "ark-ff",
+ "ark-serialize",
+ "ark-std",
+ "dleq_vrf 0.0.2 (git+https://github.com/w3f/ring-vrf?branch=pub-kzg)",
+ "fflonk",
+ "merlin 3.0.0",
+ "rand_chacha 0.3.1",
+ "rand_core 0.6.4",
+ "ring 0.1.0",
+ "sha2 0.10.7",
+ "zeroize",
+]
+
+[[package]]
+name = "bandersnatch_vrfs"
+version = "0.0.4"
 source = "git+https://github.com/w3f/ring-vrf?rev=2019248#2019248785389b3246d55b1c3b0e9bdef4454cb7"
 dependencies = [
  "ark-bls12-381",
@@ -1233,7 +1281,7 @@ dependencies = [
  "ark-ff",
  "ark-serialize",
  "ark-std",
- "dleq_vrf",
+ "dleq_vrf 0.0.2 (git+https://github.com/w3f/ring-vrf?rev=2019248)",
  "fflonk",
  "merlin 3.0.0",
  "rand_chacha 0.3.1",
@@ -4340,6 +4388,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "derive-where"
+version = "1.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "146398d62142a0f35248a608f17edf0dde57338354966d6e41d0eb2d16980ccb"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.39",
+]
+
+[[package]]
 name = "derive_builder"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4526,15 +4585,31 @@ checksum = "86e3bdc80eee6e16b2b6b0f87fbc98c04bee3455e35174c0de1a125d0688c632"
 [[package]]
 name = "dleq_vrf"
 version = "0.0.2"
+source = "git+https://github.com/w3f/ring-vrf?branch=pub-kzg#c7bc92a77d36b41204d3ce95fecf80e7364e7783"
+dependencies = [
+ "ark-ec",
+ "ark-ff",
+ "ark-scale",
+ "ark-secret-scalar 0.0.2 (git+https://github.com/w3f/ring-vrf?branch=pub-kzg)",
+ "ark-serialize",
+ "ark-std",
+ "ark-transcript 0.0.2 (git+https://github.com/w3f/ring-vrf?branch=pub-kzg)",
+ "arrayvec 0.7.4",
+ "zeroize",
+]
+
+[[package]]
+name = "dleq_vrf"
+version = "0.0.2"
 source = "git+https://github.com/w3f/ring-vrf?rev=2019248#2019248785389b3246d55b1c3b0e9bdef4454cb7"
 dependencies = [
  "ark-ec",
  "ark-ff",
  "ark-scale",
- "ark-secret-scalar",
+ "ark-secret-scalar 0.0.2 (git+https://github.com/w3f/ring-vrf?rev=2019248)",
  "ark-serialize",
  "ark-std",
- "ark-transcript",
+ "ark-transcript 0.0.2 (git+https://github.com/w3f/ring-vrf?rev=2019248)",
  "arrayvec 0.7.4",
  "zeroize",
 ]
@@ -5110,7 +5185,7 @@ dependencies = [
 [[package]]
 name = "fflonk"
 version = "0.1.0"
-source = "git+https://github.com/w3f/fflonk#1beb0585e1c8488956fac7f05da061f9b41e8948"
+source = "git+https://github.com/w3f/fflonk#95f3a57d1f4252fe95310c1567d153f25f3066b4"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -8560,6 +8635,7 @@ dependencies = [
  "pallet-timestamp",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
+ "pallet-verifiable",
  "parity-scale-codec",
  "scale-info",
  "serde_json",
@@ -10957,6 +11033,24 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std 8.0.0",
+]
+
+[[package]]
+name = "pallet-verifiable"
+version = "0.1.0"
+dependencies = [
+ "ark-scale",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std 8.0.0",
+ "verifiable",
 ]
 
 [[package]]
@@ -17268,7 +17362,7 @@ name = "sp-core"
 version = "21.0.0"
 dependencies = [
  "array-bytes 6.1.0",
- "bandersnatch_vrfs",
+ "bandersnatch_vrfs 0.0.4 (git+https://github.com/w3f/ring-vrf?rev=2019248)",
  "bip39",
  "bitflags 1.3.2",
  "blake2 0.10.6",
@@ -19936,6 +20030,23 @@ name = "vcpkg"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
+
+[[package]]
+name = "verifiable"
+version = "0.1.0"
+source = "git+https://github.com/davxy/verifiable?branch=bandersnatch-vrf-impl#497f5982c6c489fa806d909f800008b00c65961f"
+dependencies = [
+ "ark-scale",
+ "ark-serialize",
+ "bandersnatch_vrfs 0.0.4 (git+https://github.com/w3f/ring-vrf?branch=pub-kzg)",
+ "bounded-collections",
+ "derive-where",
+ "fflonk",
+ "parity-scale-codec",
+ "ring 0.1.0",
+ "scale-info",
+ "schnorrkel 0.10.2",
+]
 
 [[package]]
 name = "version_check"
