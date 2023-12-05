@@ -28,7 +28,10 @@ use std::{
 	sync::Mutex,
 };
 use verifiable::{
-	ring_vrf_impl::{bandersnatch_vrfs::CanonicalDeserialize, RingVrfVerifiable},
+	ring_vrf_impl::{
+		bandersnatch_vrfs::{CanonicalDeserialize, PublicKey},
+		RingVrfVerifiable,
+	},
 	GenerateVerifiable,
 };
 
@@ -47,6 +50,9 @@ pub trait VerifiableApi {
 
 	#[method(name = "verifiable_reset")]
 	fn reset(&self, member: Option<String>) -> RpcResult<()>;
+
+	#[method(name = "verifiable_members")]
+	fn members(&self) -> RpcResult<Vec<String>>;
 }
 
 type Seed = [u8; 32];
@@ -58,12 +64,20 @@ struct MemberData {
 }
 
 pub struct Verifiable {
-	keymap: Mutex<HashMap<RawMember, MemberData>>,
+	// List of members.
+	// We should keep track of the order as it should be the same as the one used to
+	// construct the ring on-chain.
+	members: Mutex<Vec<RawMember>>,
+	// Map from member to member-data.
+	// For fast access to associated data.
+	data: Mutex<HashMap<RawMember, MemberData>>,
 }
+
+pub struct VerifiableImpl {}
 
 impl Verifiable {
 	pub fn new() -> Self {
-		Self { keymap: Mutex::new(HashMap::new()) }
+		Self { members: Mutex::new(Default::default()), data: Mutex::new(Default::default()) }
 	}
 }
 
@@ -74,6 +88,7 @@ pub enum Error {
 	CommitNotFound,
 	Commitment,
 	Proof,
+	Other,
 }
 
 fn my_err(e: Error, msg: String) -> CallError {
@@ -102,26 +117,25 @@ impl VerifiableApiServer for Verifiable {
 		let member = hex::encode(raw_public).to_string();
 		log::debug!(target: LOG_TARGET, "  member: 0x{}", member);
 
-		let mut keymap = self.keymap.lock().unwrap();
-		keymap.insert(raw_public, MemberData { seed, commitment: None });
+		let mut data = self.data.lock().unwrap();
+		if data.insert(raw_public, MemberData { seed, commitment: None }).is_none() {
+			self.members.lock().unwrap().push(raw_public)
+		}
 
-		log::debug!(target: LOG_TARGET, "  members count: {}", keymap.len());
+		log::debug!(target: LOG_TARGET, "  members count: {}", data.len());
 
 		Ok(member)
 	}
 
 	// This should be called when the ring is finalized
 	fn open(&self, member: String) -> RpcResult<()> {
-		use verifiable::ring_vrf_impl::bandersnatch_vrfs::PublicKey;
-
-		let mut keymap = self.keymap.lock().unwrap();
-		let members: Vec<_> = keymap
-			.keys()
+		let members = self.members.lock().unwrap();
+		let members: Vec<_> = members
+			.iter()
 			.map(|m| {
-				let buf = *m;
-				let pk = PublicKey::deserialize_compressed(buf.as_slice())
-					.expect("Deserializing members");
-				pk.into()
+				PublicKey::deserialize_compressed(m.as_slice())
+					.expect("Deserializing members")
+					.into()
 			})
 			.collect();
 
@@ -133,7 +147,8 @@ impl VerifiableApiServer for Verifiable {
 			my_err(Error::Decode, format!("Decoding input element: {}", e.to_string()))
 		})?;
 
-		let Entry::Occupied(mut member_entry) = keymap.entry(raw_member) else {
+		let mut data = self.data.lock().unwrap();
+		let Entry::Occupied(mut member_entry) = data.entry(raw_member) else {
 			log::error!(target: LOG_TARGET, "Member not found");
 			return Err(my_err(Error::MemberNotFound, "Member no found".into()).into())
 		};
@@ -152,12 +167,12 @@ impl VerifiableApiServer for Verifiable {
 	}
 
 	fn create(&self, member: String, message: String) -> RpcResult<(String, String)> {
-		let mut keymap = self.keymap.lock().unwrap();
+		let mut data = self.data.lock().unwrap();
 
 		let raw_member =
 			to_raw_member(member).map_err(|e| my_err(e, format!("Decoding input member")))?;
 
-		let Entry::Occupied(mut member_entry) = keymap.entry(raw_member) else {
+		let Entry::Occupied(mut member_entry) = data.entry(raw_member) else {
 			log::error!(target: LOG_TARGET, "Member not found");
 			return Err(my_err(Error::MemberNotFound, "Member no found".into()).into())
 		};
@@ -169,7 +184,15 @@ impl VerifiableApiServer for Verifiable {
 
 		let seed = member_entry.get().seed;
 		let secret = RingVrfVerifiable::new_secret(seed);
-		// TODO : check if public is equal to member
+		let expected_member = RingVrfVerifiable::member_from_secret(&secret);
+		let member = PublicKey::deserialize_compressed(raw_member.as_slice()).map_err(|e| {
+			log::error!(target: LOG_TARGET, "Error decoding input element");
+			my_err(Error::Decode, format!("Decoding input element: {}", e.to_string()))
+		})?;
+		if expected_member.0 != member {
+			log::error!(target: LOG_TARGET, "Expected member and member doensn't match. This is bug.");
+			return Err(my_err(Error::Other, "Mismatch with expected member".into()).into())
+		}
 
 		let (proof, alias) =
 			RingVrfVerifiable::create(commitment, &secret, b"VERIFIABLE", message.as_bytes())
@@ -187,25 +210,36 @@ impl VerifiableApiServer for Verifiable {
 	}
 
 	fn reset(&self, member: Option<String>) -> RpcResult<()> {
-		let mut keymap = self.keymap.lock().unwrap();
+		let mut data = self.data.lock().unwrap();
+		let mut members = self.members.lock().unwrap();
 
 		let Some(member) = member else {
 			log::debug!(target: LOG_TARGET, "Flushing everything");
-			keymap.clear();
+			data.clear();
+			members.clear();
 			return Ok(())
 		};
 
 		let raw_member =
 			to_raw_member(member).map_err(|e| my_err(e, format!("Decoding input member")))?;
 
-		if let None = keymap.remove(&raw_member) {
+		if let None = data.remove(&raw_member) {
 			log::warn!(target: LOG_TARGET, "Member not found");
 			return Err(my_err(Error::MemberNotFound, "Member no found".into()).into())
 		};
+		if let Some(idx) = members.iter().position(|&k| k == raw_member) {
+			members.remove(idx);
+		}
 
 		log::debug!(target: LOG_TARGET, "Flushed data for member");
 
 		Ok(())
+	}
+
+	fn members(&self) -> RpcResult<Vec<String>> {
+		let members = self.members.lock().unwrap();
+		let members: Vec<_> = members.iter().map(|m| hex::encode(m)).collect();
+		Ok(members)
 	}
 }
 
