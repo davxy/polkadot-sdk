@@ -90,6 +90,8 @@ pub mod pallet {
 				return Err(Error::<T>::RingFinalized.into())
 			}
 
+			// NOTE: this should not be fully loaded. Just load the single chunk
+			// in the `get_chunk` closure.
 			let Some(mut intermediate) = Intermediate::<T>::get() else {
 				log::warn!(target: LOG_TARGET, "Ring not initialized");
 				return Err(Error::<T>::RingNotInitialized.into())
@@ -179,6 +181,9 @@ pub mod pallet {
 			log::debug!(target: LOG_TARGET, "Initialize ring builder key");
 			let ring_builder_key = RingBuilderKey::from_srs(&kzg.pcs_params, DOMAIN_SIZE);
 
+			// NOTE: as we constructed a fresh KZG we already have all the chunks in memory.
+			// This will not be the case if we have a pre-built `RingBuilderKey`.
+			// Load just the chunks required by `get_chunks` callback
 			log::debug!(target: LOG_TARGET, "Initialize empty ring");
 			let srs_chunks: Vec<_> =
 				ring_builder_key.lis_in_g1.into_iter().map(|p| ArkScale(p)).collect();
