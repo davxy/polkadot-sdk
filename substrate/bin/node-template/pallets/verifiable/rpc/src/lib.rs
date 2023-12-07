@@ -30,7 +30,7 @@ use std::{
 use verifiable::{
 	ring_vrf_impl::{
 		bandersnatch_vrfs::{CanonicalDeserialize, PublicKey},
-		RingVrfVerifiable,
+		BandersnatchVrfVerifiable as RingVrfVerifiable,
 	},
 	GenerateVerifiable,
 };

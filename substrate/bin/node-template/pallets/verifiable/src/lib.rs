@@ -10,13 +10,13 @@ pub use pallet::*;
 extern crate alloc;
 use alloc::string::String;
 
-use ark_scale::ArkScale;
+use ark_scale::{ark_serialize::CanonicalDeserialize, ArkScale};
 use frame_support::BoundedVec;
 use sp_std::vec::Vec;
 use verifiable::{
 	ring_vrf_impl::{
-		bandersnatch_vrfs::ring::KZG, fflonk::pcs::PcsParams, ring::ring::RingBuilderKey,
-		RingVrfVerifiable, DOMAIN_SIZE,
+		bandersnatch_vrfs::ring::StaticVerifierKey, BandersnatchVrfVerifiable as RingVrfVerifiable,
+		DOMAIN_SIZE,
 	},
 	GenerateVerifiable,
 };
@@ -24,6 +24,11 @@ use verifiable::{
 const LOG_TARGET: &str = "verifiable 🛡";
 
 const SRS_MAX_CHUNKS: u32 = DOMAIN_SIZE as u32;
+
+#[cfg(feature = "small-ring")]
+const ONCHAIN_VK: &'static [u8] = include_bytes!("zcash-9.vk");
+#[cfg(not(feature = "small-ring"))]
+const ONCHAIN_VK: &'static [u8] = include_bytes!("zcash-16.vk");
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -70,7 +75,18 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
+			let vk = StaticVerifierKey::deserialize_uncompressed_unchecked(ONCHAIN_VK)
+				.expect("Failed to deserialize onchain vk");
+			assert_eq!(vk.lag_g1.len(), DOMAIN_SIZE);
+
+			log::debug!(target: LOG_TARGET, "Building SRS chunks for domain size: {}", vk.lag_g1.len());
+			let srs_chunks: Vec<_> = vk.lag_g1.into_iter().map(|p| ArkScale(p)).collect();
+			SrsChunks::<T>::set(SrsChunksVec::truncate_from(srs_chunks));
+
+			// Init empty ring
 			Pallet::<T>::make_empty_ring();
+
+			log::debug!(target: LOG_TARGET, "Initialization completed");
 		}
 	}
 
@@ -78,7 +94,7 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(0)]
-		#[pallet::weight(0)]
+		#[pallet::weight(Weight::zero())]
 		pub fn push_member(
 			origin: OriginFor<T>,
 			member: <RingVrfVerifiable as GenerateVerifiable>::Member,
@@ -90,18 +106,18 @@ pub mod pallet {
 				return Err(Error::<T>::RingFinalized.into())
 			}
 
-			// NOTE: this should not be fully loaded. Just load the single chunk
-			// in the `get_chunk` closure.
 			let Some(mut intermediate) = Intermediate::<T>::get() else {
 				log::warn!(target: LOG_TARGET, "Ring not initialized");
 				return Err(Error::<T>::RingNotInitialized.into())
 			};
 
-			log::debug!(target: LOG_TARGET, "Adding member to index: {}", intermediate.ring.curr_keys);
-
+			// NOTE: this should not be fully loaded. Just load the single chunk
+			// in the `get_chunk` closure.
 			let srs_chunks = SrsChunks::<T>::get();
-
-			let get_chunk = |i: usize| Ok(srs_chunks[i].clone());
+			let get_chunk = |i: usize| {
+				log::debug!(target: LOG_TARGET, "Adding member to index: {}", i);
+				Ok(srs_chunks[i].clone())
+			};
 
 			RingVrfVerifiable::push_member(&mut intermediate, member, get_chunk)
 				.map_err(|_| Error::<T>::PushMemberFailure)?;
@@ -113,7 +129,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(1)]
-		#[pallet::weight(0)]
+		#[pallet::weight(Weight::zero())]
 		pub fn finish_members(origin: OriginFor<T>) -> DispatchResult {
 			let _who = ensure_signed(origin)?;
 
@@ -133,7 +149,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(2)]
-		#[pallet::weight(0)]
+		#[pallet::weight(Weight::zero())]
 		pub fn reset_members(origin: OriginFor<T>) -> DispatchResult {
 			let _who = ensure_signed(origin)?;
 
@@ -144,7 +160,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(3)]
-		#[pallet::weight(0)]
+		#[pallet::weight(Weight::zero())]
 		pub fn validate_proof(
 			origin: OriginFor<T>,
 			proof: <RingVrfVerifiable as GenerateVerifiable>::Proof,
@@ -175,42 +191,9 @@ pub mod pallet {
 
 	impl<T: Config> Pallet<T> {
 		fn make_empty_ring() {
-			log::debug!(target: LOG_TARGET, "Initialize testing KZG for domain {}", DOMAIN_SIZE);
-			let kzg = KZG::testing_kzg_setup([0; 32], DOMAIN_SIZE as u32);
-
-			log::debug!(target: LOG_TARGET, "Initialize ring builder key");
-			let ring_builder_key = RingBuilderKey::from_srs(&kzg.pcs_params, DOMAIN_SIZE);
-
-			// NOTE: as we constructed a fresh KZG we already have all the chunks in memory.
-			// This will not be the case if we have a pre-built `RingBuilderKey`.
-			// Load just the chunks required by `get_chunks` callback
 			log::debug!(target: LOG_TARGET, "Initialize empty ring");
-			let srs_chunks: Vec<_> =
-				ring_builder_key.lis_in_g1.into_iter().map(|p| ArkScale(p)).collect();
-
-			let get_chunks = |off: usize, len: usize| {
-				let chunks: Vec<_> = srs_chunks[off..off + len].iter().cloned().collect();
-				Ok(chunks)
-			};
-			let intermediate =
-				RingVrfVerifiable::start_members(kzg.pcs_params.raw_vk(), get_chunks);
+			let intermediate = RingVrfVerifiable::start_members();
 			Intermediate::<T>::set(Some(intermediate));
-
-			// Persist SRS chunks for later usage
-			log::debug!(target: LOG_TARGET, "SRS CHUNKS {}", srs_chunks.len());
-
-			if SrsChunksVec::bound() < srs_chunks.len() {
-				log::error!(
-					target: LOG_TARGET,
-					"Initialization failed. SRS bound {} but actual len is {}",
-					SrsChunksVec::bound(),
-					srs_chunks.len()
-				);
-				panic!("Bad SRS length");
-			}
-			SrsChunks::<T>::set(SrsChunksVec::truncate_from(srs_chunks));
-
-			log::debug!(target: LOG_TARGET, "Initialization completed");
 		}
 	}
 }

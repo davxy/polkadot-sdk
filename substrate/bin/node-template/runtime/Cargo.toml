@@ -52,7 +52,7 @@ frame-system-benchmarking = { path = "../../../frame/system/benchmarking", defau
 
 # Local Dependencies
 pallet-template = { path = "../pallets/template", default-features = false }
-pallet-verifiable = { path = "../pallets/verifiable", default-features = false }
+pallet-verifiable = { path = "../pallets/verifiable", default-features = false, features = ["small-ring"] }
 
 [build-dependencies]
 substrate-wasm-builder = { path = "../../../utils/wasm-builder", optional = true }
