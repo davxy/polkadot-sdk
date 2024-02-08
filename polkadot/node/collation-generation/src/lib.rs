@@ -359,7 +359,7 @@ async fn handle_new_activations<Context>(
 							validation_code_hash,
 							n_validators,
 						},
-						&task_config.key,
+						task_config.key.clone(),
 						&mut task_sender,
 						result_sender,
 						&metrics,
@@ -426,8 +426,14 @@ async fn handle_submit_collation<Context>(
 		n_validators,
 	};
 
-	construct_and_distribute_receipt(collation, &config.key, ctx.sender(), result_sender, metrics)
-		.await;
+	construct_and_distribute_receipt(
+		collation,
+		config.key.clone(),
+		ctx.sender(),
+		result_sender,
+		metrics,
+	)
+	.await;
 
 	Ok(())
 }
@@ -445,7 +451,7 @@ struct PreparedCollation {
 /// which is distributed to validators.
 async fn construct_and_distribute_receipt(
 	collation: PreparedCollation,
-	key: &CollatorPair,
+	key: CollatorPair,
 	sender: &mut impl overseer::CollationGenerationSenderTrait,
 	result_sender: Option<oneshot::Sender<CollationSecondedSignal>>,
 	metrics: &Metrics,

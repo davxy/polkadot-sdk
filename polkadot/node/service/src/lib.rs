@@ -662,6 +662,7 @@ pub struct NewFull {
 
 /// Is this node running as in-process node for a parachain node?
 #[cfg(feature = "full-node")]
+#[derive(Clone)]
 pub enum IsParachainNode {
 	/// This node is running as in-process node for a parachain collator.
 	Collator(CollatorPair),

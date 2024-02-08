@@ -126,6 +126,7 @@ macro_rules! app_crypto_pair {
 	($pair:ty, $key_type:expr, $crypto_type:expr) => {
 		$crate::wrap! {
 			/// A generic `AppPublic` wrapper type over $pair crypto; this has no specific App.
+			#[derive(Clone)]
 			pub struct Pair($pair);
 		}
 

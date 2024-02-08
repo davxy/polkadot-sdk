@@ -341,7 +341,6 @@ pub enum MultiSigner {
 
 impl FromEntropy for MultiSigner {
 	fn from_entropy(input: &mut impl codec::Input) -> Result<Self, codec::Error> {
-		// This buffer must be large enough to accomodate the larger seed of the supported crypto.
 		Ok(match input.read_byte()? % 3 {
 			0 => Self::Ed25519(FromEntropy::from_entropy(input)?),
 			1 => Self::Sr25519(FromEntropy::from_entropy(input)?),
