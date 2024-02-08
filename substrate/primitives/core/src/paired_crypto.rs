@@ -249,7 +249,7 @@ impl<L, R, const LEFT_PLUS_RIGHT_LEN: usize> UncheckedFrom<[u8; LEFT_PLUS_RIGHT_
 impl<L: PublicT, R: PublicT, const LEFT_PLUS_RIGHT_LEN: usize> std::fmt::Display
 	for Public<L, R, LEFT_PLUS_RIGHT_LEN>
 where
-	Public<L, R, LEFT_PLUS_RIGHT_LEN>: CryptoType,
+	Public<L, R, LEFT_PLUS_RIGHT_LEN>: CryptoType<Public = Self>,
 {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		write!(f, "{}", self.to_ss58check())
@@ -259,7 +259,7 @@ where
 impl<L: PublicT, R: PublicT, const LEFT_PLUS_RIGHT_LEN: usize> sp_std::fmt::Debug
 	for Public<L, R, LEFT_PLUS_RIGHT_LEN>
 where
-	Self: CryptoType,
+	Self: CryptoType<Public = Self>,
 	[u8; LEFT_PLUS_RIGHT_LEN]: crate::hexdisplay::AsBytesRef,
 {
 	#[cfg(feature = "std")]
@@ -278,7 +278,7 @@ where
 impl<L: PublicT, R: PublicT, const LEFT_PLUS_RIGHT_LEN: usize> Serialize
 	for Public<L, R, LEFT_PLUS_RIGHT_LEN>
 where
-	Self: CryptoType,
+	Self: CryptoType<Public = Self>,
 {
 	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 	where
@@ -292,7 +292,7 @@ where
 impl<'de, L: PublicT, R: PublicT, const LEFT_PLUS_RIGHT_LEN: usize> Deserialize<'de>
 	for Public<L, R, LEFT_PLUS_RIGHT_LEN>
 where
-	Self: CryptoType,
+	Self: CryptoType<Public = Self>,
 {
 	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
 	where
@@ -306,7 +306,7 @@ where
 impl<LeftPublic: PublicT, RightPublic: PublicT, const LEFT_PLUS_RIGHT_LEN: usize> PublicT
 	for Public<LeftPublic, RightPublic, LEFT_PLUS_RIGHT_LEN>
 where
-	Public<LeftPublic, RightPublic, LEFT_PLUS_RIGHT_LEN>: CryptoType,
+	Public<LeftPublic, RightPublic, LEFT_PLUS_RIGHT_LEN>: CryptoType<Public = Self>,
 {
 	fn verify(&self, sig: &Self::Signature, message: impl AsRef<[u8]>) -> bool {
 		let left_sig_len = <LeftPublic::Signature as ByteArray>::LEN;
@@ -333,7 +333,7 @@ impl<L, R, const LEFT_PLUS_RIGHT_LEN: usize> Derive for Public<L, R, LEFT_PLUS_R
 pub struct Signature<const LEFT_PLUS_RIGHT_LEN: usize>([u8; LEFT_PLUS_RIGHT_LEN]);
 
 impl<const LEFT_PLUS_RIGHT_LEN: usize> SignatureT for Signature<LEFT_PLUS_RIGHT_LEN> where
-	Signature<LEFT_PLUS_RIGHT_LEN>: CryptoType
+	Signature<LEFT_PLUS_RIGHT_LEN>: CryptoType<Signature = Self>
 {
 }
 
@@ -456,7 +456,7 @@ impl<
 		const SIGNATURE_LEN: usize,
 	> PairT for Pair<LeftPair, RightPair, PUBLIC_KEY_LEN, SIGNATURE_LEN>
 where
-	Pair<LeftPair, RightPair, PUBLIC_KEY_LEN, SIGNATURE_LEN>: CryptoType,
+	Pair<LeftPair, RightPair, PUBLIC_KEY_LEN, SIGNATURE_LEN>: CryptoType<Pair = Self>,
 	LeftPair::Seed: From<Seed> + Into<Seed>,
 	RightPair::Seed: From<Seed> + Into<Seed>,
 	Self::Public: UncheckedFrom<[u8; PUBLIC_KEY_LEN]>,

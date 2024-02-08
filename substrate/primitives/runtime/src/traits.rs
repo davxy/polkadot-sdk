@@ -128,12 +128,13 @@ impl Verify for sp_core::sr25519::Signature {
 
 impl Verify for sp_core::ecdsa::Signature {
 	type Signer = sp_core::ecdsa::Public;
+
 	fn verify<L: Lazy<[u8]>>(&self, mut msg: L, signer: &sp_core::ecdsa::Public) -> bool {
 		match sp_io::crypto::secp256k1_ecdsa_recover_compressed(
 			self.as_ref(),
 			&sp_io::hashing::blake2_256(msg.get()),
 		) {
-			Ok(pubkey) => signer.as_ref() == &pubkey[..],
+			Ok(pubkey) => &signer[..] == &pubkey[..],
 			_ => false,
 		}
 	}

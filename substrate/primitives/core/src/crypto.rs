@@ -495,9 +495,11 @@ pub trait ByteArray: AsRef<[u8]> + AsMut<[u8]> + for<'a> TryFrom<&'a [u8], Error
 
 /// Trait suitable for typical cryptographic key public type.
 pub trait Public:
-	CryptoType + ByteArray + Derive + PartialEq + Eq + Clone + Send + Sync + Hash
+	CryptoType<Public = Self> + ByteArray + Derive + PartialEq + Eq + Clone + Send + Sync + Hash
 {
-	/// Verify a signature on a message. Returns true if the signature is good.
+	/// Verify a signature on a message.
+	///
+	/// Returns true if the signature is good.
 	fn verify(&self, sig: &Self::Signature, message: impl AsRef<[u8]>) -> bool;
 }
 
@@ -807,7 +809,7 @@ impl sp_std::str::FromStr for SecretUri {
 ///
 /// For now it just specifies how to create a key from a phrase and derivation path.
 #[cfg(feature = "full_crypto")]
-pub trait Pair: CryptoType + Sized {
+pub trait Pair: CryptoType<Pair = Self> + Sized {
 	/// The type used to (minimally) encode the data required to securely create
 	/// a new key pair.
 	type Seed: Default + AsRef<[u8]> + AsMut<[u8]> + Clone;
@@ -1010,25 +1012,35 @@ where
 }
 
 /// TODO
-pub trait Signature: CryptoType + ByteArray {}
+pub trait Signature: CryptoType<Signature = Self> + ByteArray {
+	/// Verify a signature on a message.
+	///
+	/// Returns true if the signature is good.
+	fn verify(&self, public: &Self::Public, message: impl AsRef<[u8]>) -> bool {
+		public.verify(self, message)
+	}
+}
 
 /// Trait grouping types required by any public key crypto scheme.
 pub trait CryptoType {
 	/// Secret key component.
 	#[cfg(feature = "full_crypto")]
-	type Pair: Pair + CryptoType<Public = Self::Public, Signature = Self::Signature>;
+	type Pair: Pair
+		+ CryptoType<Pair = Self::Pair, Public = Self::Public, Signature = Self::Signature>;
 	/// Public key component.
 	#[cfg(feature = "full_crypto")]
-	type Public: Public + CryptoType<Pair = Self::Pair, Signature = Self::Signature>;
+	type Public: Public
+		+ CryptoType<Pair = Self::Pair, Public = Self::Public, Signature = Self::Signature>;
 	/// Public key component.
 	#[cfg(not(feature = "full_crypto"))]
-	type Public: Public + CryptoType<Signature = Self::Signature>;
+	type Public: Public + CryptoType<Public = Self::Public, Signature = Self::Signature>;
 	/// Signature.
 	#[cfg(feature = "full_crypto")]
-	type Signature: Signature + CryptoType<Pair = Self::Pair, Public = Self::Public>;
+	type Signature: Signature
+		+ CryptoType<Pair = Self::Pair, Public = Self::Public, Signature = Self::Signature>;
 	/// Signature.
 	#[cfg(not(feature = "full_crypto"))]
-	type Signature: Signature + CryptoType<Public = Self::Public>;
+	type Signature: Signature + CryptoType<Public = Self::Public, Signature = Self::Signature>;
 }
 
 #[cfg(feature = "full_crypto")]

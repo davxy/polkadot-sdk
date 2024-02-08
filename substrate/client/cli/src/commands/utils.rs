@@ -34,9 +34,9 @@ use sp_runtime::{traits::IdentifyAccount, MultiSigner};
 use std::path::PathBuf;
 
 /// Public key type for Runtime
-pub type PublicFor<P> = <P as sp_core::Pair>::Public;
+pub type PublicFor<P> = <P as sp_core::crypto::CryptoType>::Public;
 /// Seed type for Runtime
-pub type SeedFor<P> = <P as sp_core::Pair>::Seed;
+pub type SeedFor<P> = <P as sp_core::crypto::Pair>::Seed;
 
 /// helper method to fetch uri from `Option<String>` either as a file or read from stdin
 pub fn read_uri(uri: Option<&String>) -> error::Result<String> {
