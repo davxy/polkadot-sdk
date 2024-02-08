@@ -15,24 +15,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// tag::description[]
-//! Simple Ed25519 API.
-// end::description[]
+//! Ed25519 API.
 
 #[cfg(feature = "full_crypto")]
 use sp_std::vec::Vec;
 
-use crate::{
-	crypto::ByteArray,
-	hash::{H256, H512},
-};
+use crate::hash::{H256, H512};
 use codec::{Decode, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
 #[cfg(feature = "serde")]
 use crate::crypto::Ss58Codec;
 use crate::crypto::{
-	CryptoType, CryptoTypeId, Derive, FromEntropy, Public as TraitPublic, UncheckedFrom,
+	impl_byte_array, impl_crypto_type, CryptoTypeId, Derive, FromEntropy, Public as TraitPublic,
+	Signature as SignatureTrait, UncheckedFrom,
 };
 #[cfg(feature = "full_crypto")]
 use crate::crypto::{DeriveError, DeriveJunction, Pair as TraitPair, SecretStringError};
@@ -45,7 +41,6 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use sp_runtime_interface::pass_by::PassByInner;
 #[cfg(all(not(feature = "std"), feature = "serde"))]
 use sp_std::alloc::{format, string::String};
-use sp_std::ops::Deref;
 
 /// An identifier used to match public keys against ed25519 keys
 pub const CRYPTO_ID: CryptoTypeId = CryptoTypeId(*b"ed25");
@@ -89,51 +84,6 @@ impl FromEntropy for Public {
 	}
 }
 
-impl AsRef<[u8; 32]> for Public {
-	fn as_ref(&self) -> &[u8; 32] {
-		&self.0
-	}
-}
-
-impl AsRef<[u8]> for Public {
-	fn as_ref(&self) -> &[u8] {
-		&self.0[..]
-	}
-}
-
-impl AsMut<[u8]> for Public {
-	fn as_mut(&mut self) -> &mut [u8] {
-		&mut self.0[..]
-	}
-}
-
-impl Deref for Public {
-	type Target = [u8];
-
-	fn deref(&self) -> &Self::Target {
-		&self.0
-	}
-}
-
-impl TryFrom<&[u8]> for Public {
-	type Error = ();
-
-	fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
-		if data.len() != Self::LEN {
-			return Err(())
-		}
-		let mut r = [0u8; Self::LEN];
-		r.copy_from_slice(data);
-		Ok(Self::unchecked_from(r))
-	}
-}
-
-impl From<Public> for [u8; 32] {
-	fn from(x: Public) -> Self {
-		x.0
-	}
-}
-
 #[cfg(feature = "full_crypto")]
 impl From<Pair> for Public {
 	fn from(x: Pair) -> Self {
@@ -153,12 +103,6 @@ impl std::str::FromStr for Public {
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		Self::from_ss58check(s)
-	}
-}
-
-impl UncheckedFrom<[u8; 32]> for Public {
-	fn unchecked_from(x: [u8; 32]) -> Self {
-		Public::from_raw(x)
 	}
 }
 
@@ -211,22 +155,10 @@ impl<'de> Deserialize<'de> for Public {
 
 /// A signature (a 512-bit value).
 #[cfg_attr(feature = "full_crypto", derive(Hash))]
-#[derive(Encode, Decode, MaxEncodedLen, PassByInner, TypeInfo, PartialEq, Eq)]
+#[derive(Copy, Clone, Encode, Decode, MaxEncodedLen, PassByInner, TypeInfo, PartialEq, Eq)]
 pub struct Signature(pub [u8; 64]);
 
-impl TryFrom<&[u8]> for Signature {
-	type Error = ();
-
-	fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
-		if data.len() == 64 {
-			let mut inner = [0u8; 64];
-			inner.copy_from_slice(data);
-			Ok(Signature(inner))
-		} else {
-			Err(())
-		}
-	}
-}
+impl_byte_array!(Signature, 64);
 
 #[cfg(feature = "serde")]
 impl Serialize for Signature {
@@ -251,41 +183,9 @@ impl<'de> Deserialize<'de> for Signature {
 	}
 }
 
-impl Clone for Signature {
-	fn clone(&self) -> Self {
-		let mut r = [0u8; 64];
-		r.copy_from_slice(&self.0[..]);
-		Signature(r)
-	}
-}
-
 impl From<Signature> for H512 {
 	fn from(v: Signature) -> H512 {
 		H512::from(v.0)
-	}
-}
-
-impl From<Signature> for [u8; 64] {
-	fn from(v: Signature) -> [u8; 64] {
-		v.0
-	}
-}
-
-impl AsRef<[u8; 64]> for Signature {
-	fn as_ref(&self) -> &[u8; 64] {
-		&self.0
-	}
-}
-
-impl AsRef<[u8]> for Signature {
-	fn as_ref(&self) -> &[u8] {
-		&self.0[..]
-	}
-}
-
-impl AsMut<[u8]> for Signature {
-	fn as_mut(&mut self) -> &mut [u8] {
-		&mut self.0[..]
 	}
 }
 
@@ -298,12 +198,6 @@ impl sp_std::fmt::Debug for Signature {
 	#[cfg(not(feature = "std"))]
 	fn fmt(&self, _: &mut sp_std::fmt::Formatter) -> sp_std::fmt::Result {
 		Ok(())
-	}
-}
-
-impl UncheckedFrom<[u8; 64]> for Signature {
-	fn unchecked_from(data: [u8; 64]) -> Signature {
-		Signature(data)
 	}
 }
 
@@ -361,25 +255,24 @@ impl Public {
 	}
 }
 
-impl ByteArray for Public {
-	const LEN: usize = 32;
-}
+impl_byte_array!(Public, 32);
 
-impl TraitPublic for Public {}
+impl TraitPublic for Public {
+	/// Verify a signature on a message.
+	///
+	/// Returns true if the signature is good.
+	fn verify(&self, sig: &Signature, message: impl AsRef<[u8]>) -> bool {
+		let Ok(public) = VerificationKey::try_from(self.0) else { return false };
+		let Ok(signature) = ed25519_zebra::Signature::try_from(sig.as_ref()) else { return false };
+		public.verify(&signature, message.as_ref()).is_ok()
+	}
+}
 
 impl Derive for Public {}
 
-/// Derive a single hard junction.
-#[cfg(feature = "full_crypto")]
-fn derive_hard_junction(secret_seed: &Seed, cc: &[u8; 32]) -> Seed {
-	("Ed25519HDKD", secret_seed, cc).using_encoded(sp_crypto_hashing::blake2_256)
-}
-
 #[cfg(feature = "full_crypto")]
 impl TraitPair for Pair {
-	type Public = Public;
 	type Seed = Seed;
-	type Signature = Signature;
 
 	/// Make a new key pair from secret seed material. The slice must be 32 bytes long or it
 	/// will return `None`.
@@ -398,11 +291,13 @@ impl TraitPair for Pair {
 		path: Iter,
 		_seed: Option<Seed>,
 	) -> Result<(Pair, Option<Seed>), DeriveError> {
+		let derive_hard_junction =
+			|seed, cc| ("Ed25519HDKD", seed, cc).using_encoded(sp_crypto_hashing::blake2_256);
 		let mut acc = self.secret.into();
 		for j in path {
 			match j {
 				DeriveJunction::Soft(_cc) => return Err(DeriveError::SoftKeyInPath),
-				DeriveJunction::Hard(cc) => acc = derive_hard_junction(&acc, &cc),
+				DeriveJunction::Hard(cc) => acc = derive_hard_junction(acc, cc),
 			}
 		}
 		Ok((Self::from_seed(&acc), Some(acc)))
@@ -416,15 +311,6 @@ impl TraitPair for Pair {
 	/// Sign a message.
 	fn sign(&self, message: &[u8]) -> Signature {
 		Signature::from_raw(self.secret.sign(message).into())
-	}
-
-	/// Verify a signature on a message.
-	///
-	/// Returns true if the signature is good.
-	fn verify<M: AsRef<[u8]>>(sig: &Signature, message: M, public: &Public) -> bool {
-		let Ok(public) = VerificationKey::try_from(public.as_slice()) else { return false };
-		let Ok(signature) = ed25519_zebra::Signature::try_from(sig.as_ref()) else { return false };
-		public.verify(&signature, message.as_ref()).is_ok()
 	}
 
 	/// Return a vec filled with raw data.
@@ -453,20 +339,9 @@ impl Pair {
 	}
 }
 
-impl CryptoType for Public {
-	#[cfg(feature = "full_crypto")]
-	type Pair = Pair;
-}
+impl SignatureTrait for Signature {}
 
-impl CryptoType for Signature {
-	#[cfg(feature = "full_crypto")]
-	type Pair = Pair;
-}
-
-#[cfg(feature = "full_crypto")]
-impl CryptoType for Pair {
-	type Pair = Pair;
-}
+impl_crypto_type!(Pair, Public, Signature);
 
 #[cfg(test)]
 mod test {
@@ -516,8 +391,8 @@ mod test {
 		let message = b"";
 		let signature = array_bytes::hex2array_unchecked("e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b");
 		let signature = Signature::from_raw(signature);
-		assert!(pair.sign(&message[..]) == signature);
-		assert!(Pair::verify(&signature, &message[..], &public));
+		assert!(pair.sign(message) == signature);
+		assert!(public.verify(&signature, message));
 	}
 
 	#[test]
@@ -537,8 +412,8 @@ mod test {
 		let message = b"";
 		let signature = array_bytes::hex2array_unchecked("e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b");
 		let signature = Signature::from_raw(signature);
-		assert!(pair.sign(&message[..]) == signature);
-		assert!(Pair::verify(&signature, &message[..], &public));
+		assert!(pair.sign(message) == signature);
+		assert!(public.verify(&signature, message));
 	}
 
 	#[test]
@@ -546,9 +421,9 @@ mod test {
 		let (pair, _) = Pair::generate();
 		let public = pair.public();
 		let message = b"Something important";
-		let signature = pair.sign(&message[..]);
-		assert!(Pair::verify(&signature, &message[..], &public));
-		assert!(!Pair::verify(&signature, b"Something else", &public));
+		let signature = pair.sign(message);
+		assert!(public.verify(&signature, message));
+		assert!(!public.verify(&signature, b"Something else"));
 	}
 
 	#[test]
@@ -564,8 +439,8 @@ mod test {
 		let message = array_bytes::hex2bytes_unchecked("2f8c6129d816cf51c374bc7f08c3e63ed156cf78aefb4a6550d97b87997977ee00000000000000000200d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a4500000000000000");
 		let signature = pair.sign(&message[..]);
 		println!("Correct signature: {:?}", signature);
-		assert!(Pair::verify(&signature, &message[..], &public));
-		assert!(!Pair::verify(&signature, "Other message", &public));
+		assert!(public.verify(&signature, message));
+		assert!(!public.verify(&signature, "Other message"));
 	}
 
 	#[test]
@@ -611,7 +486,7 @@ mod test {
 		// Signature is 64 bytes, so 128 chars + 2 quote chars
 		assert_eq!(serialized_signature.len(), 130);
 		let signature = serde_json::from_str(&serialized_signature).unwrap();
-		assert!(Pair::verify(&signature, &message[..], &pair.public()));
+		assert!(pair.public().verify(&signature, &message));
 	}
 
 	#[test]

@@ -15,7 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Simple sr25519 (Schnorr-Ristretto) API.
+//! Sr25519 (Schnorr-Ristretto) API.
 //!
 //! Note: `CHAIN_CODE_LENGTH` must be equal to `crate::crypto::JUNCTION_ID_LEN`
 //! for this to work.
@@ -38,14 +38,13 @@ use sp_std::vec::Vec;
 
 use crate::{
 	crypto::{
-		ByteArray, CryptoType, CryptoTypeId, Derive, FromEntropy, Public as TraitPublic,
-		UncheckedFrom,
+		impl_byte_array, impl_crypto_type, CryptoTypeId, Derive, FromEntropy,
+		Public as TraitPublic, Signature as SignatureTrait, UncheckedFrom,
 	},
 	hash::{H256, H512},
 };
 use codec::{Decode, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
-use sp_std::ops::Deref;
 
 #[cfg(feature = "full_crypto")]
 use schnorrkel::keys::{MINI_SECRET_KEY_LENGTH, SECRET_KEY_LENGTH};
@@ -102,38 +101,6 @@ impl FromEntropy for Public {
 	}
 }
 
-impl AsRef<[u8; 32]> for Public {
-	fn as_ref(&self) -> &[u8; 32] {
-		&self.0
-	}
-}
-
-impl AsRef<[u8]> for Public {
-	fn as_ref(&self) -> &[u8] {
-		&self.0[..]
-	}
-}
-
-impl AsMut<[u8]> for Public {
-	fn as_mut(&mut self) -> &mut [u8] {
-		&mut self.0[..]
-	}
-}
-
-impl Deref for Public {
-	type Target = [u8];
-
-	fn deref(&self) -> &Self::Target {
-		&self.0
-	}
-}
-
-impl From<Public> for [u8; 32] {
-	fn from(x: Public) -> [u8; 32] {
-		x.0
-	}
-}
-
 impl From<Public> for H256 {
 	fn from(x: Public) -> H256 {
 		x.0.into()
@@ -146,25 +113,6 @@ impl std::str::FromStr for Public {
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		Self::from_ss58check(s)
-	}
-}
-
-impl TryFrom<&[u8]> for Public {
-	type Error = ();
-
-	fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
-		if data.len() != Self::LEN {
-			return Err(())
-		}
-		let mut r = [0u8; 32];
-		r.copy_from_slice(data);
-		Ok(Self::unchecked_from(r))
-	}
-}
-
-impl UncheckedFrom<[u8; 32]> for Public {
-	fn unchecked_from(x: [u8; 32]) -> Self {
-		Public::from_raw(x)
 	}
 }
 
@@ -217,22 +165,10 @@ impl<'de> Deserialize<'de> for Public {
 
 /// An Schnorrkel/Ristretto x25519 ("sr25519") signature.
 #[cfg_attr(feature = "full_crypto", derive(Hash))]
-#[derive(Encode, Decode, MaxEncodedLen, PassByInner, TypeInfo, PartialEq, Eq)]
+#[derive(Clone, Encode, Decode, MaxEncodedLen, PassByInner, TypeInfo, PartialEq, Eq)]
 pub struct Signature(pub [u8; 64]);
 
-impl TryFrom<&[u8]> for Signature {
-	type Error = ();
-
-	fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
-		if data.len() == 64 {
-			let mut inner = [0u8; 64];
-			inner.copy_from_slice(data);
-			Ok(Signature(inner))
-		} else {
-			Err(())
-		}
-	}
-}
+impl_byte_array!(Signature, 64);
 
 #[cfg(feature = "serde")]
 impl Serialize for Signature {
@@ -257,41 +193,9 @@ impl<'de> Deserialize<'de> for Signature {
 	}
 }
 
-impl Clone for Signature {
-	fn clone(&self) -> Self {
-		let mut r = [0u8; 64];
-		r.copy_from_slice(&self.0[..]);
-		Signature(r)
-	}
-}
-
-impl From<Signature> for [u8; 64] {
-	fn from(v: Signature) -> [u8; 64] {
-		v.0
-	}
-}
-
 impl From<Signature> for H512 {
 	fn from(v: Signature) -> H512 {
 		H512::from(v.0)
-	}
-}
-
-impl AsRef<[u8; 64]> for Signature {
-	fn as_ref(&self) -> &[u8; 64] {
-		&self.0
-	}
-}
-
-impl AsRef<[u8]> for Signature {
-	fn as_ref(&self) -> &[u8] {
-		&self.0[..]
-	}
-}
-
-impl AsMut<[u8]> for Signature {
-	fn as_mut(&mut self) -> &mut [u8] {
-		&mut self.0[..]
 	}
 }
 
@@ -311,12 +215,6 @@ impl sp_std::fmt::Debug for Signature {
 	#[cfg(not(feature = "std"))]
 	fn fmt(&self, _: &mut sp_std::fmt::Formatter) -> sp_std::fmt::Result {
 		Ok(())
-	}
-}
-
-impl UncheckedFrom<[u8; 64]> for Signature {
-	fn unchecked_from(data: [u8; 64]) -> Signature {
-		Signature(data)
 	}
 }
 
@@ -393,11 +291,15 @@ impl Public {
 	}
 }
 
-impl ByteArray for Public {
-	const LEN: usize = 32;
-}
+impl_byte_array!(Public, 32);
 
-impl TraitPublic for Public {}
+impl TraitPublic for Public {
+	fn verify(&self, sig: &Signature, message: impl AsRef<[u8]>) -> bool {
+		let Ok(public) = PublicKey::from_bytes(self.as_ref()) else { return false };
+		let Ok(signature) = schnorrkel::Signature::from_bytes(sig.as_ref()) else { return false };
+		public.verify_simple(SIGNING_CTX, message.as_ref(), &signature).is_ok()
+	}
+}
 
 #[cfg(feature = "std")]
 impl From<MiniSecretKey> for Pair {
@@ -434,21 +336,13 @@ impl AsRef<schnorrkel::Keypair> for Pair {
 	}
 }
 
-/// Derive a single hard junction.
-#[cfg(feature = "full_crypto")]
-fn derive_hard_junction(secret: &SecretKey, cc: &[u8; CHAIN_CODE_LENGTH]) -> MiniSecretKey {
-	secret.hard_derive_mini_secret_key(Some(ChainCode(*cc)), b"").0
-}
-
 /// The raw secret seed, which can be used to recreate the `Pair`.
 #[cfg(feature = "full_crypto")]
 type Seed = [u8; MINI_SECRET_KEY_LENGTH];
 
 #[cfg(feature = "full_crypto")]
 impl TraitPair for Pair {
-	type Public = Public;
 	type Seed = Seed;
-	type Signature = Signature;
 
 	/// Get the public key.
 	fn public(&self) -> Public {
@@ -484,6 +378,10 @@ impl TraitPair for Pair {
 		path: Iter,
 		seed: Option<Seed>,
 	) -> Result<(Pair, Option<Seed>), DeriveError> {
+		let derive_hard_junction = |secret: &SecretKey, cc: &[u8; CHAIN_CODE_LENGTH]| {
+			secret.hard_derive_mini_secret_key(Some(ChainCode(*cc)), b"").0
+		};
+
 		let seed = seed
 			.and_then(|s| MiniSecretKey::from_bytes(&s).ok())
 			.filter(|msk| msk.expand(ExpansionMode::Ed25519) == self.0.secret);
@@ -504,26 +402,20 @@ impl TraitPair for Pair {
 		self.0.sign(context.bytes(message)).into()
 	}
 
-	fn verify<M: AsRef<[u8]>>(sig: &Signature, message: M, pubkey: &Public) -> bool {
-		let Ok(signature) = schnorrkel::Signature::from_bytes(sig.as_ref()) else { return false };
-		let Ok(public) = PublicKey::from_bytes(pubkey.as_ref()) else { return false };
-		public.verify_simple(SIGNING_CTX, message.as_ref(), &signature).is_ok()
-	}
-
 	fn to_raw_vec(&self) -> Vec<u8> {
 		self.0.secret.to_bytes().to_vec()
 	}
 }
 
 #[cfg(feature = "std")]
-impl Pair {
+impl Public {
 	/// Verify a signature on a message. Returns `true` if the signature is good.
 	/// Supports old 0.1.1 deprecated signatures and should be used only for backward
 	/// compatibility.
-	pub fn verify_deprecated<M: AsRef<[u8]>>(sig: &Signature, message: M, pubkey: &Public) -> bool {
+	pub fn verify_deprecated(&self, sig: &Signature, message: impl AsRef<[u8]>) -> bool {
 		// Match both schnorrkel 0.1.1 and 0.8.0+ signatures, supporting both wallets
 		// that have not been upgraded and those that have.
-		match PublicKey::from_bytes(pubkey.as_ref()) {
+		match PublicKey::from_bytes(self.as_ref()) {
 			Ok(pk) => pk
 				.verify_simple_preaudit_deprecated(SIGNING_CTX, message.as_ref(), &sig.0[..])
 				.is_ok(),
@@ -532,20 +424,9 @@ impl Pair {
 	}
 }
 
-impl CryptoType for Public {
-	#[cfg(feature = "full_crypto")]
-	type Pair = Pair;
-}
+impl SignatureTrait for Signature {}
 
-impl CryptoType for Signature {
-	#[cfg(feature = "full_crypto")]
-	type Pair = Pair;
-}
-
-#[cfg(feature = "full_crypto")]
-impl CryptoType for Pair {
-	type Pair = Pair;
-}
+impl_crypto_type!(Pair, Public, Signature);
 
 /// Schnorrkel VRF related types and operations.
 pub mod vrf {
@@ -846,7 +727,7 @@ mod tests {
 		let known = array_bytes::hex2bytes_unchecked(
 			"d6c71059dbbe9ad2b0ed3f289738b800836eb425544ce694825285b958ca755e",
 		);
-		assert_eq!(pair.public().to_raw_vec(), known);
+		assert_eq!(pair.public().as_ref(), known);
 	}
 
 	#[test]
@@ -856,7 +737,7 @@ mod tests {
 		let known = array_bytes::hex2bytes_unchecked(
 			"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d",
 		);
-		assert_eq!(pair.public().to_raw_vec(), known);
+		assert_eq!(pair.public().as_ref(), known);
 	}
 
 	#[test]
@@ -869,8 +750,8 @@ mod tests {
 			"5a9755f069939f45d96aaf125cf5ce7ba1db998686f87f2fb3cbdea922078741a73891ba265f70c31436e18a9acd14d189d73c12317ab6c313285cd938453202"
 		));
 		let message = b"Verifying that I am the owner of 5G9hQLdsKQswNPgB499DeA5PkFBbgkLPJWkkS6FAM6xGQ8xD. Hash: 221455a3\n";
-		assert!(Pair::verify_deprecated(&signature, &message[..], &public));
-		assert!(!Pair::verify(&signature, &message[..], &public));
+		assert!(public.verify_deprecated(&signature, message));
+		assert!(!public.verify(&signature, message));
 	}
 
 	#[test]
@@ -967,7 +848,7 @@ mod tests {
 		);
 		let message = b"";
 		let signature = pair.sign(message);
-		assert!(Pair::verify(&signature, &message[..], &public));
+		assert!(public.verify(&signature, message));
 	}
 
 	#[test]
@@ -975,8 +856,8 @@ mod tests {
 		let (pair, _) = Pair::generate();
 		let public = pair.public();
 		let message = b"Something important";
-		let signature = pair.sign(&message[..]);
-		assert!(Pair::verify(&signature, &message[..], &public));
+		let signature = pair.sign(message);
+		assert!(public.verify(&signature, message));
 	}
 
 	#[test]
@@ -984,11 +865,11 @@ mod tests {
 		let (pair, _) = Pair::generate();
 		let public = pair.public();
 		let message = b"Signed payload";
-		let Signature(mut bytes) = pair.sign(&message[..]);
+		let Signature(mut bytes) = pair.sign(message);
 		bytes[0] = !bytes[0];
 		bytes[2] = !bytes[2];
 		let signature = Signature(bytes);
-		assert!(!Pair::verify(&signature, &message[..], &public));
+		assert!(!public.verify(&signature, message));
 	}
 
 	#[test]
@@ -996,8 +877,8 @@ mod tests {
 		let (pair, _) = Pair::generate();
 		let public = pair.public();
 		let message = b"Something important";
-		let signature = pair.sign(&message[..]);
-		assert!(!Pair::verify(&signature, &b"Something unimportant", &public));
+		let signature = pair.sign(message);
+		assert!(!public.verify(&signature, &b"Something unimportant"));
 	}
 
 	#[test]
@@ -1011,8 +892,8 @@ mod tests {
 			))
 		);
 		let message = array_bytes::hex2bytes_unchecked("2f8c6129d816cf51c374bc7f08c3e63ed156cf78aefb4a6550d97b87997977ee00000000000000000200d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a4500000000000000");
-		let signature = pair.sign(&message[..]);
-		assert!(Pair::verify(&signature, &message[..], &public));
+		let signature = pair.sign(&message);
+		assert!(public.verify(&signature, message));
 	}
 
 	#[test]
@@ -1038,20 +919,20 @@ mod tests {
 		let js_signature = Signature::from_raw(array_bytes::hex2array_unchecked(
 			"28a854d54903e056f89581c691c1f7d2ff39f8f896c9e9c22475e60902cc2b3547199e0e91fa32902028f2ca2355e8cdd16cfe19ba5e8b658c94aa80f3b81a00"
 		));
-		assert!(Pair::verify_deprecated(&js_signature, b"SUBSTRATE", &public));
-		assert!(!Pair::verify(&js_signature, b"SUBSTRATE", &public));
+		assert!(public.verify_deprecated(&js_signature, b"SUBSTRATE"));
+		assert!(!public.verify(&js_signature, b"SUBSTRATE"));
 	}
 
 	#[test]
 	fn signature_serialization_works() {
 		let pair = Pair::from_seed(b"12345678901234567890123456789012");
 		let message = b"Something important";
-		let signature = pair.sign(&message[..]);
+		let signature = pair.sign(message);
 		let serialized_signature = serde_json::to_string(&signature).unwrap();
 		// Signature is 64 bytes, so 128 chars + 2 quote chars
 		assert_eq!(serialized_signature.len(), 130);
 		let signature = serde_json::from_str(&serialized_signature).unwrap();
-		assert!(Pair::verify(&signature, &message[..], &pair.public()));
+		assert!(pair.public().verify(&signature, &message));
 	}
 
 	#[test]

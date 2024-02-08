@@ -23,7 +23,8 @@
 #[cfg(feature = "serde")]
 use crate::crypto::Ss58Codec;
 use crate::crypto::{
-	ByteArray, CryptoType, CryptoTypeId, Derive, Public as TraitPublic, UncheckedFrom, VrfPublic,
+	impl_byte_array, impl_crypto_type, CryptoTypeId, Derive, Public as TraitPublic,
+	Signature as SignatureTrait, VrfPublic,
 };
 #[cfg(feature = "full_crypto")]
 use crate::crypto::{DeriveError, DeriveJunction, Pair as TraitPair, SecretStringError, VrfSecret};
@@ -55,6 +56,8 @@ const PUBLIC_SERIALIZED_SIZE: usize = 33;
 const SIGNATURE_SERIALIZED_SIZE: usize = 65;
 const PREOUT_SERIALIZED_SIZE: usize = 33;
 
+impl_crypto_type!(Pair, Public, Signature);
+
 /// Bandersnatch public key.
 #[cfg_attr(feature = "full_crypto", derive(Hash))]
 #[derive(
@@ -72,52 +75,15 @@ const PREOUT_SERIALIZED_SIZE: usize = 33;
 )]
 pub struct Public(pub [u8; PUBLIC_SERIALIZED_SIZE]);
 
-impl UncheckedFrom<[u8; PUBLIC_SERIALIZED_SIZE]> for Public {
-	fn unchecked_from(raw: [u8; PUBLIC_SERIALIZED_SIZE]) -> Self {
-		Public(raw)
+impl_byte_array!(Public, PUBLIC_SERIALIZED_SIZE);
+
+impl TraitPublic for Public {
+	fn verify(&self, signature: &Signature, data: impl AsRef<[u8]>) -> bool {
+		let data = vrf::VrfSignData::new_unchecked(SIGNING_CTX, &[data.as_ref()], None);
+		let signature =
+			vrf::VrfSignature { signature: *signature, pre_outputs: vrf::VrfIosVec::default() };
+		self.vrf_verify(&data, &signature)
 	}
-}
-
-impl AsRef<[u8; PUBLIC_SERIALIZED_SIZE]> for Public {
-	fn as_ref(&self) -> &[u8; PUBLIC_SERIALIZED_SIZE] {
-		&self.0
-	}
-}
-
-impl AsRef<[u8]> for Public {
-	fn as_ref(&self) -> &[u8] {
-		&self.0[..]
-	}
-}
-
-impl AsMut<[u8]> for Public {
-	fn as_mut(&mut self) -> &mut [u8] {
-		&mut self.0[..]
-	}
-}
-
-impl TryFrom<&[u8]> for Public {
-	type Error = ();
-
-	fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
-		if data.len() != PUBLIC_SERIALIZED_SIZE {
-			return Err(())
-		}
-		let mut r = [0u8; PUBLIC_SERIALIZED_SIZE];
-		r.copy_from_slice(data);
-		Ok(Self::unchecked_from(r))
-	}
-}
-
-impl ByteArray for Public {
-	const LEN: usize = PUBLIC_SERIALIZED_SIZE;
-}
-
-impl TraitPublic for Public {}
-
-impl CryptoType for Public {
-	#[cfg(feature = "full_crypto")]
-	type Pair = Pair;
 }
 
 impl Derive for Public {}
@@ -158,45 +124,9 @@ impl<'de> Deserialize<'de> for Public {
 #[derive(Clone, Copy, PartialEq, Eq, Encode, Decode, PassByInner, MaxEncodedLen, TypeInfo)]
 pub struct Signature([u8; SIGNATURE_SERIALIZED_SIZE]);
 
-impl UncheckedFrom<[u8; SIGNATURE_SERIALIZED_SIZE]> for Signature {
-	fn unchecked_from(raw: [u8; SIGNATURE_SERIALIZED_SIZE]) -> Self {
-		Signature(raw)
-	}
-}
+impl SignatureTrait for Signature {}
 
-impl AsRef<[u8]> for Signature {
-	fn as_ref(&self) -> &[u8] {
-		&self.0[..]
-	}
-}
-
-impl AsMut<[u8]> for Signature {
-	fn as_mut(&mut self) -> &mut [u8] {
-		&mut self.0[..]
-	}
-}
-
-impl TryFrom<&[u8]> for Signature {
-	type Error = ();
-
-	fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
-		if data.len() != SIGNATURE_SERIALIZED_SIZE {
-			return Err(())
-		}
-		let mut r = [0u8; SIGNATURE_SERIALIZED_SIZE];
-		r.copy_from_slice(data);
-		Ok(Self::unchecked_from(r))
-	}
-}
-
-impl ByteArray for Signature {
-	const LEN: usize = SIGNATURE_SERIALIZED_SIZE;
-}
-
-impl CryptoType for Signature {
-	#[cfg(feature = "full_crypto")]
-	type Pair = Pair;
-}
+impl_byte_array!(Signature, SIGNATURE_SERIALIZED_SIZE);
 
 impl sp_std::fmt::Debug for Signature {
 	#[cfg(feature = "std")]
@@ -233,8 +163,6 @@ impl Pair {
 #[cfg(feature = "full_crypto")]
 impl TraitPair for Pair {
 	type Seed = Seed;
-	type Public = Public;
-	type Signature = Signature;
 
 	/// Make a new key pair from secret seed material.
 	///
@@ -278,7 +206,7 @@ impl TraitPair for Pair {
 		public
 			.serialize_compressed(raw.as_mut_slice())
 			.expect("serialization length is constant and checked by test; qed");
-		Public::unchecked_from(raw)
+		Public(raw)
 	}
 
 	/// Sign a message.
@@ -292,22 +220,10 @@ impl TraitPair for Pair {
 		self.vrf_sign(&data).signature
 	}
 
-	fn verify<M: AsRef<[u8]>>(signature: &Signature, data: M, public: &Public) -> bool {
-		let data = vrf::VrfSignData::new_unchecked(SIGNING_CTX, &[data.as_ref()], None);
-		let signature =
-			vrf::VrfSignature { signature: *signature, pre_outputs: vrf::VrfIosVec::default() };
-		public.vrf_verify(&data, &signature)
-	}
-
 	/// Return a vector filled with the seed (32 bytes).
 	fn to_raw_vec(&self) -> Vec<u8> {
 		self.seed().to_vec()
 	}
-}
-
-#[cfg(feature = "full_crypto")]
-impl CryptoType for Pair {
-	type Pair = Pair;
 }
 
 /// Bandersnatch VRF types and operations.
@@ -579,7 +495,7 @@ pub mod vrf {
 			data: &VrfSignData,
 			signature: &VrfSignature,
 		) -> bool {
-			let Ok(public) = PublicKey::deserialize_compressed_unchecked(self.as_slice()) else {
+			let Ok(public) = PublicKey::deserialize_compressed_unchecked(&self[..]) else {
 				return false
 			};
 
@@ -589,10 +505,10 @@ pub mod vrf {
 			// Deserialize only the proof, the rest has already been deserialized
 			// This is another hack used because backend signature type is generic over
 			// the number of ios.
-			let Ok(proof) = ThinVrfSignature::<0>::deserialize_compressed_unchecked(
-				signature.signature.as_ref(),
-			)
-			.map(|s| s.proof) else {
+			let Ok(proof) =
+				ThinVrfSignature::<0>::deserialize_compressed_unchecked(&signature.signature[..])
+					.map(|s| s.proof)
+			else {
 				return false
 			};
 			let signature = ThinVrfSignature { proof, preouts };
@@ -722,7 +638,7 @@ pub mod ring_vrf {
 		pub fn prover(&self, public_keys: &[Public], public_idx: usize) -> Option<RingProver> {
 			let mut pks = Vec::with_capacity(public_keys.len());
 			for public_key in public_keys {
-				let pk = PublicKey::deserialize_compressed_unchecked(public_key.as_slice()).ok()?;
+				let pk = PublicKey::deserialize_compressed_unchecked(&public_key[..]).ok()?;
 				pks.push(pk.0.into());
 			}
 
@@ -735,7 +651,7 @@ pub mod ring_vrf {
 		pub fn verifier(&self, public_keys: &[Public]) -> Option<RingVerifier> {
 			let mut pks = Vec::with_capacity(public_keys.len());
 			for public_key in public_keys {
-				let pk = PublicKey::deserialize_compressed_unchecked(public_key.as_slice()).ok()?;
+				let pk = PublicKey::deserialize_compressed_unchecked(&public_key[..]).ok()?;
 				pks.push(pk.0.into());
 			}
 
@@ -748,7 +664,7 @@ pub mod ring_vrf {
 		pub fn verifier_data(&self, public_keys: &[Public]) -> Option<RingVerifierData> {
 			let mut pks = Vec::with_capacity(public_keys.len());
 			for public_key in public_keys {
-				let pk = PublicKey::deserialize_compressed_unchecked(public_key.as_slice()).ok()?;
+				let pk = PublicKey::deserialize_compressed_unchecked(&public_key[..]).ok()?;
 				pks.push(pk.0.into());
 			}
 			Some(RingVerifierData {
@@ -992,7 +908,8 @@ mod tests {
 		let msg = b"hello";
 
 		let signature = pair.sign(msg);
-		assert!(Pair::verify(&signature, msg, &public));
+
+		assert!(public.verify(&signature, msg));
 	}
 
 	#[test]

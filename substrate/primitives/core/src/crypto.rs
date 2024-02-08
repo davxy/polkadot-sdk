@@ -494,7 +494,12 @@ pub trait ByteArray: AsRef<[u8]> + AsMut<[u8]> + for<'a> TryFrom<&'a [u8], Error
 }
 
 /// Trait suitable for typical cryptographic key public type.
-pub trait Public: CryptoType + ByteArray + Derive + PartialEq + Eq + Clone + Send + Sync {}
+pub trait Public:
+	CryptoType + ByteArray + Derive + PartialEq + Eq + Clone + Send + Sync + Hash
+{
+	/// Verify a signature on a message. Returns true if the signature is good.
+	fn verify(&self, sig: &Self::Signature, message: impl AsRef<[u8]>) -> bool;
+}
 
 /// An opaque 32-byte cryptographic identifier.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Encode, Decode, MaxEncodedLen, TypeInfo)]
@@ -511,65 +516,20 @@ impl AccountId32 {
 	}
 }
 
+impl_byte_array!(AccountId32, 32);
+
 impl UncheckedFrom<crate::hash::H256> for AccountId32 {
 	fn unchecked_from(h: crate::hash::H256) -> Self {
 		AccountId32(h.into())
 	}
 }
 
-impl ByteArray for AccountId32 {
-	const LEN: usize = 32;
-}
-
 #[cfg(feature = "serde")]
 impl Ss58Codec for AccountId32 {}
-
-impl AsRef<[u8]> for AccountId32 {
-	fn as_ref(&self) -> &[u8] {
-		&self.0[..]
-	}
-}
-
-impl AsMut<[u8]> for AccountId32 {
-	fn as_mut(&mut self) -> &mut [u8] {
-		&mut self.0[..]
-	}
-}
-
-impl AsRef<[u8; 32]> for AccountId32 {
-	fn as_ref(&self) -> &[u8; 32] {
-		&self.0
-	}
-}
-
-impl AsMut<[u8; 32]> for AccountId32 {
-	fn as_mut(&mut self) -> &mut [u8; 32] {
-		&mut self.0
-	}
-}
 
 impl From<[u8; 32]> for AccountId32 {
 	fn from(x: [u8; 32]) -> Self {
 		Self::new(x)
-	}
-}
-
-impl<'a> TryFrom<&'a [u8]> for AccountId32 {
-	type Error = ();
-	fn try_from(x: &'a [u8]) -> Result<AccountId32, ()> {
-		if x.len() == 32 {
-			let mut data = [0; 32];
-			data.copy_from_slice(x);
-			Ok(AccountId32(data))
-		} else {
-			Err(())
-		}
-	}
-}
-
-impl From<AccountId32> for [u8; 32] {
-	fn from(x: AccountId32) -> [u8; 32] {
-		x.0
 	}
 }
 
@@ -685,6 +645,8 @@ mod dummy {
 
 	impl CryptoType for Dummy {
 		type Pair = Dummy;
+		type Public = Dummy;
+		type Signature = Dummy;
 	}
 
 	impl Derive for Dummy {}
@@ -702,12 +664,17 @@ mod dummy {
 			b""
 		}
 	}
-	impl Public for Dummy {}
+
+	impl Public for Dummy {
+		fn verify(&self, _: &Dummy, _: impl AsRef<[u8]>) -> bool {
+			true
+		}
+	}
+
+	impl Signature for Dummy {}
 
 	impl Pair for Dummy {
-		type Public = Dummy;
 		type Seed = Dummy;
-		type Signature = Dummy;
 
 		#[cfg(feature = "std")]
 		fn generate_with_phrase(_: Option<&str>) -> (Self, String, Self::Seed) {
@@ -733,10 +700,6 @@ mod dummy {
 
 		fn sign(&self, _: &[u8]) -> Self::Signature {
 			Self
-		}
-
-		fn verify<M: AsRef<[u8]>>(_: &Self::Signature, _: M, _: &Self::Public) -> bool {
-			true
 		}
 
 		fn public(&self) -> Self::Public {
@@ -845,16 +808,9 @@ impl sp_std::str::FromStr for SecretUri {
 /// For now it just specifies how to create a key from a phrase and derivation path.
 #[cfg(feature = "full_crypto")]
 pub trait Pair: CryptoType + Sized {
-	/// The type which is used to encode a public key.
-	type Public: Public + Hash;
-
 	/// The type used to (minimally) encode the data required to securely create
 	/// a new key pair.
 	type Seed: Default + AsRef<[u8]> + AsMut<[u8]> + Clone;
-
-	/// The type used to represent a signature. Can be created from a key pair and a message
-	/// and verified with the message and a public key.
-	type Signature: AsRef<[u8]>;
 
 	/// Generate new secure (random) key pair.
 	///
@@ -929,7 +885,11 @@ pub trait Pair: CryptoType + Sized {
 	fn sign(&self, message: &[u8]) -> Self::Signature;
 
 	/// Verify a signature on a message. Returns true if the signature is good.
-	fn verify<M: AsRef<[u8]>>(sig: &Self::Signature, message: M, pubkey: &Self::Public) -> bool;
+	/// TODO: Deprecated use `Public::verify()`
+	#[deprecated(note = "Use Public::verify() instead")]
+	fn verify(sig: &Self::Signature, message: impl AsRef<[u8]>, public: &Self::Public) -> bool {
+		public.verify(sig, message)
+	}
 
 	/// Get the public key.
 	fn public(&self) -> Self::Public;
@@ -1049,12 +1009,112 @@ where
 	}
 }
 
+/// TODO
+pub trait Signature: CryptoType + ByteArray {}
+
 /// Type which has a particular kind of crypto associated with it.
 pub trait CryptoType {
 	/// The pair key type of this crypto.
-	#[cfg(feature = "full_crypto")]
-	type Pair: Pair;
+	type Pair: Pair + CryptoType<Public = Self::Public, Signature = Self::Signature>;
+	/// TODO
+	type Public: Public + CryptoType<Pair = Self::Pair, Signature = Self::Signature>;
+	/// TODO
+	type Signature: Signature + CryptoType<Public = Self::Public, Pair = Self::Pair>;
 }
+
+macro_rules! impl_crypto_type {
+	($secret:ident, $public:ident, $signature:ident) => {
+		impl $crate::crypto::CryptoType for $secret {
+			type Pair = $secret;
+			type Public = $public;
+			type Signature = $signature;
+		}
+		impl $crate::crypto::CryptoType for $public {
+			type Pair = $secret;
+			type Public = $public;
+			type Signature = $signature;
+		}
+		impl $crate::crypto::CryptoType for $signature {
+			type Pair = $secret;
+			type Public = $public;
+			type Signature = $signature;
+		}
+	};
+}
+pub(crate) use impl_crypto_type;
+
+macro_rules! impl_byte_array {
+	($struct_name:ident, $size:expr) => {
+		impl ::core::ops::Deref for $struct_name {
+			type Target = [u8];
+
+			fn deref(&self) -> &Self::Target {
+				&self.0
+			}
+		}
+
+		impl ::core::ops::DerefMut for $struct_name {
+			fn deref_mut(&mut self) -> &mut Self::Target {
+				&mut self.0
+			}
+		}
+
+		impl AsRef<[u8]> for $struct_name {
+			fn as_ref(&self) -> &[u8] {
+				&self.0
+			}
+		}
+
+		impl AsMut<[u8]> for $struct_name {
+			fn as_mut(&mut self) -> &mut [u8] {
+				&mut self.0
+			}
+		}
+
+		impl AsRef<[u8; $size]> for $struct_name {
+			fn as_ref(&self) -> &[u8; $size] {
+				&self.0
+			}
+		}
+
+		impl AsMut<[u8; $size]> for $struct_name {
+			fn as_mut(&mut self) -> &mut [u8; $size] {
+				&mut self.0
+			}
+		}
+
+		impl TryFrom<&[u8]> for $struct_name {
+			type Error = ();
+
+			fn try_from(data: &[u8]) -> Result<Self, ()> {
+				if data.len() == $size {
+					let mut inner = [0u8; $size];
+					inner.copy_from_slice(data);
+					Ok($struct_name(inner))
+				} else {
+					Err(())
+				}
+			}
+		}
+
+		impl From<$struct_name> for [u8; $size] {
+			fn from(x: $struct_name) -> Self {
+				x.0
+			}
+		}
+
+		impl $crate::crypto::ByteArray for $struct_name {
+			const LEN: usize = $size;
+		}
+
+		impl $crate::crypto::UncheckedFrom<[u8; $size]> for $struct_name {
+			fn unchecked_from(raw: [u8; $size]) -> Self {
+				$struct_name(raw)
+			}
+		}
+	};
+}
+pub(crate) use impl_byte_array;
 
 /// An identifier for a type of cryptographic key.
 ///
@@ -1231,67 +1291,25 @@ mod tests {
 	use super::*;
 	use crate::DeriveJunction;
 
+	impl_crypto_type!(TestPair, TestPublic, TestSignature);
+
 	#[derive(Clone, Eq, PartialEq, Debug)]
-	enum TestPair {
+	pub enum TestPair {
 		Generated,
 		GeneratedWithPhrase,
 		GeneratedFromPhrase { phrase: String, password: Option<String> },
 		Standard { phrase: String, password: Option<String>, path: Vec<DeriveJunction> },
 		Seed(Vec<u8>),
 	}
+
 	impl Default for TestPair {
 		fn default() -> Self {
 			TestPair::Generated
 		}
 	}
-	impl CryptoType for TestPair {
-		type Pair = Self;
-	}
 
-	#[derive(Clone, PartialEq, Eq, Hash, Default)]
-	struct TestPublic;
-	impl AsRef<[u8]> for TestPublic {
-		fn as_ref(&self) -> &[u8] {
-			&[]
-		}
-	}
-	impl AsMut<[u8]> for TestPublic {
-		fn as_mut(&mut self) -> &mut [u8] {
-			&mut []
-		}
-	}
-	impl<'a> TryFrom<&'a [u8]> for TestPublic {
-		type Error = ();
-
-		fn try_from(data: &'a [u8]) -> Result<Self, ()> {
-			Self::from_slice(data)
-		}
-	}
-	impl CryptoType for TestPublic {
-		type Pair = TestPair;
-	}
-	impl Derive for TestPublic {}
-	impl ByteArray for TestPublic {
-		const LEN: usize = 0;
-		fn from_slice(bytes: &[u8]) -> Result<Self, ()> {
-			if bytes.is_empty() {
-				Ok(Self)
-			} else {
-				Err(())
-			}
-		}
-		fn as_slice(&self) -> &[u8] {
-			&[]
-		}
-		fn to_raw_vec(&self) -> Vec<u8> {
-			vec![]
-		}
-	}
-	impl Public for TestPublic {}
 	impl Pair for TestPair {
-		type Public = TestPublic;
 		type Seed = [u8; 8];
-		type Signature = [u8; 0];
 
 		fn generate() -> (Self, <Self as Pair>::Seed) {
 			(TestPair::Generated, [0u8; 8])
@@ -1340,15 +1358,11 @@ mod tests {
 		}
 
 		fn sign(&self, _message: &[u8]) -> Self::Signature {
-			[]
-		}
-
-		fn verify<M: AsRef<[u8]>>(_: &Self::Signature, _: M, _: &Self::Public) -> bool {
-			true
+			TestSignature::default()
 		}
 
 		fn public(&self) -> Self::Public {
-			TestPublic
+			TestPublic::default()
 		}
 
 		fn from_seed_slice(seed: &[u8]) -> Result<Self, SecretStringError> {
@@ -1359,6 +1373,26 @@ mod tests {
 			vec![]
 		}
 	}
+
+	#[derive(Default)]
+	pub struct TestSignature([u8; 0]);
+
+	impl_byte_array!(TestSignature, 0);
+
+	impl Signature for TestSignature {}
+
+	#[derive(Default, Clone, PartialEq, Eq, Hash)]
+	pub struct TestPublic([u8; 0]);
+
+	impl_byte_array!(TestPublic, 0);
+
+	impl Public for TestPublic {
+		fn verify(&self, _: &TestSignature, _: impl AsRef<[u8]>) -> bool {
+			true
+		}
+	}
+
+	impl Derive for TestPublic {}
 
 	#[test]
 	fn interpret_std_seed_should_work() {

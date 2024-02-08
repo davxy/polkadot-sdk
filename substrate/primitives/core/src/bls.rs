@@ -15,11 +15,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Simple BLS (Boneh–Lynn–Shacham) Signature API.
+//! BLS (Boneh–Lynn–Shacham) Signature API.
 
 #[cfg(feature = "serde")]
 use crate::crypto::Ss58Codec;
-use crate::crypto::{ByteArray, CryptoType, Derive, Public as TraitPublic, UncheckedFrom};
+use crate::crypto::{
+	ByteArray, CryptoType, Derive, Public as TraitPublic, Signature as SignatureTrait,
+	UncheckedFrom,
+};
 #[cfg(feature = "full_crypto")]
 use crate::crypto::{DeriveError, DeriveJunction, Pair as TraitPair, SecretStringError};
 
@@ -116,6 +119,31 @@ type Seed = [u8; SECRET_KEY_SERIALIZED_SIZE];
 pub struct Public<T> {
 	inner: [u8; PUBLIC_KEY_SERIALIZED_SIZE],
 	_phantom: PhantomData<fn() -> T>,
+}
+
+impl<T: BlsBound> TraitPublic for Public<T> {
+	fn verify(&self, sig: &Self::Signature, message: impl AsRef<[u8]>) -> bool {
+		let pubkey_array: [u8; PUBLIC_KEY_SERIALIZED_SIZE] =
+			match <[u8; PUBLIC_KEY_SERIALIZED_SIZE]>::try_from(self.as_ref()) {
+				Ok(pk) => pk,
+				Err(_) => return false,
+			};
+		let public_key = match w3f_bls::double::DoublePublicKey::<T>::from_bytes(&pubkey_array) {
+			Ok(pk) => pk,
+			Err(_) => return false,
+		};
+
+		let sig_array = match sig.inner[..].try_into() {
+			Ok(s) => s,
+			Err(_) => return false,
+		};
+		let sig = match w3f_bls::double::DoubleSignature::from_bytes(sig_array) {
+			Ok(s) => s,
+			Err(_) => return false,
+		};
+
+		sig.verify(&Message::new(b"", message.as_ref()), &public_key)
+	}
 }
 
 impl<T> Clone for Public<T> {
@@ -285,13 +313,13 @@ impl<'de, T: BlsBound> Deserialize<'de> for Public<T> {
 	}
 }
 
-impl<T: BlsBound> TraitPublic for Public<T> {}
-
 impl<T> Derive for Public<T> {}
 
 impl<T: BlsBound> CryptoType for Public<T> {
 	#[cfg(feature = "full_crypto")]
 	type Pair = Pair<T>;
+	type Public = Public<T>;
+	type Signature = Signature<T>;
 }
 
 /// A generic BLS signature.
@@ -301,6 +329,8 @@ pub struct Signature<T> {
 	inner: [u8; SIGNATURE_SERIALIZED_SIZE],
 	_phantom: PhantomData<fn() -> T>,
 }
+
+impl<T: BlsBound> SignatureTrait for Signature<T> {}
 
 impl<T> Clone for Signature<T> {
 	fn clone(&self) -> Self {
@@ -408,6 +438,8 @@ impl<T> UncheckedFrom<[u8; SIGNATURE_SERIALIZED_SIZE]> for Signature<T> {
 impl<T: BlsBound> CryptoType for Signature<T> {
 	#[cfg(feature = "full_crypto")]
 	type Pair = Pair<T>;
+	type Public = Public<T>;
+	type Signature = Signature<T>;
 }
 
 /// A key pair.
@@ -437,8 +469,6 @@ impl<T: EngineBLS> Pair<T> {}
 #[cfg(feature = "full_crypto")]
 impl<T: BlsBound> TraitPair for Pair<T> {
 	type Seed = Seed;
-	type Public = Public<T>;
-	type Signature = Signature<T>;
 
 	fn from_seed_slice(seed_slice: &[u8]) -> Result<Self, SecretStringError> {
 		if seed_slice.len() != SECRET_KEY_SERIALIZED_SIZE {
@@ -483,29 +513,6 @@ impl<T: BlsBound> TraitPair for Pair<T> {
 		Self::Signature::unchecked_from(r)
 	}
 
-	fn verify<M: AsRef<[u8]>>(sig: &Self::Signature, message: M, pubkey: &Self::Public) -> bool {
-		let pubkey_array: [u8; PUBLIC_KEY_SERIALIZED_SIZE] =
-			match <[u8; PUBLIC_KEY_SERIALIZED_SIZE]>::try_from(pubkey.as_ref()) {
-				Ok(pk) => pk,
-				Err(_) => return false,
-			};
-		let public_key = match w3f_bls::double::DoublePublicKey::<T>::from_bytes(&pubkey_array) {
-			Ok(pk) => pk,
-			Err(_) => return false,
-		};
-
-		let sig_array = match sig.inner[..].try_into() {
-			Ok(s) => s,
-			Err(_) => return false,
-		};
-		let sig = match w3f_bls::double::DoubleSignature::from_bytes(sig_array) {
-			Ok(s) => s,
-			Err(_) => return false,
-		};
-
-		sig.verify(&Message::new(b"", message.as_ref()), &public_key)
-	}
-
 	/// Get the seed for this key.
 	fn to_raw_vec(&self) -> Vec<u8> {
 		self.0
@@ -519,6 +526,8 @@ impl<T: BlsBound> TraitPair for Pair<T> {
 #[cfg(feature = "full_crypto")]
 impl<T: BlsBound> CryptoType for Pair<T> {
 	type Pair = Pair<T>;
+	type Public = Public<T>;
+	type Signature = Signature<T>;
 }
 
 // Test set exercising the BLS12-377 implementation
