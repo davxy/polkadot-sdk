@@ -124,7 +124,7 @@ pub struct Public<T> {
 }
 
 impl<T: BlsBound> TraitPublic for Public<T> {
-	fn verify(&self, sig: &Self::Signature, message: impl AsRef<[u8]>) -> bool {
+	fn verify(&self, sig: &Self::Signature, message: &[u8]) -> bool {
 		let pubkey_array: [u8; PUBLIC_KEY_SERIALIZED_SIZE] =
 			match <[u8; PUBLIC_KEY_SERIALIZED_SIZE]>::try_from(self.as_ref()) {
 				Ok(pk) => pk,
@@ -144,7 +144,7 @@ impl<T: BlsBound> TraitPublic for Public<T> {
 			Err(_) => return false,
 		};
 
-		sig.verify(&Message::new(b"", message.as_ref()), &public_key)
+		sig.verify(&Message::new(b"", message), &public_key)
 	}
 }
 
@@ -583,7 +583,7 @@ mod test {
 	);
 		let signature = Signature::unchecked_from(signature);
 		assert!(pair.sign(&message[..]) == signature);
-		assert!(Pair::verify(&signature, &message[..], &public));
+		assert!(public.verify(&signature, &message[..]));
 	}
 
 	#[test]
@@ -608,7 +608,7 @@ mod test {
 		println!("signature is {:?}", pair.sign(&message[..]));
 		let signature = pair.sign(&message[..]);
 		assert!(signature == expected_signature);
-		assert!(Pair::verify(&signature, &message[..], &public));
+		assert!(public.verify(&signature, &message[..]));
 	}
 	#[test]
 	fn generated_pair_should_work() {
@@ -616,8 +616,8 @@ mod test {
 		let public = pair.public();
 		let message = b"Something important";
 		let signature = pair.sign(&message[..]);
-		assert!(Pair::verify(&signature, &message[..], &public));
-		assert!(!Pair::verify(&signature, b"Something else", &public));
+		assert!(public.verify(&signature, &message[..]));
+		assert!(!public.verify(&signature, b"Something else"));
 	}
 
 	#[test]
@@ -636,8 +636,8 @@ mod test {
 	);
 		let signature = pair.sign(&message[..]);
 		println!("Correct signature: {:?}", signature);
-		assert!(Pair::verify(&signature, &message[..], &public));
-		assert!(!Pair::verify(&signature, "Other message", &public));
+		assert!(public.verify(&signature, &message[..]));
+		assert!(!public.verify(&signature, b"Other message"));
 	}
 
 	#[test]
@@ -683,7 +683,7 @@ mod test {
 		// Signature is 112 bytes, hexify * 2, so 224  chars + 2 quote chars
 		assert_eq!(serialized_signature.len(), 226);
 		let signature = serde_json::from_str(&serialized_signature).unwrap();
-		assert!(Pair::verify(&signature, &message[..], &pair.public()));
+		assert!(pair.public().verify(&signature, &message[..]));
 	}
 
 	#[test]

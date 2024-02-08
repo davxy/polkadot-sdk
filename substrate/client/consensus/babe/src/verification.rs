@@ -30,10 +30,10 @@ use sp_consensus_babe::{
 		CompatibleDigestItem, PreDigest, PrimaryPreDigest, SecondaryPlainPreDigest,
 		SecondaryVRFPreDigest,
 	},
-	make_vrf_sign_data, AuthorityId, AuthorityPair, AuthoritySignature,
+	make_vrf_sign_data, AuthorityId, AuthoritySignature,
 };
 use sp_consensus_slots::Slot;
-use sp_core::crypto::{Pair, Public, VrfPublic, Wraps};
+use sp_core::crypto::{Public, VrfPublic, Wraps};
 use sp_runtime::{traits::Header, DigestItem};
 
 /// BABE verification parameters
@@ -164,7 +164,7 @@ fn check_primary_header<B: BlockT + Sized>(
 		epoch_index = epoch.clone_for_slot(pre_digest.slot).epoch_index;
 	}
 
-	if !authority_id.verify(&signature, pre_hash) {
+	if !authority_id.verify(&signature, pre_hash.as_ref()) {
 		return Err(babe_err(Error::BadSignature(pre_hash)))
 	}
 
@@ -246,7 +246,7 @@ fn check_secondary_vrf_header<B: BlockT>(
 		epoch_index = epoch.clone_for_slot(pre_digest.slot).epoch_index;
 	}
 
-	if !AuthorityPair::verify(&signature, pre_hash.as_ref(), author) {
+	if !author.verify(&signature, pre_hash.as_ref()) {
 		return Err(Error::BadSignature(pre_hash))
 	}
 

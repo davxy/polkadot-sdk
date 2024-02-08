@@ -72,6 +72,7 @@ pub struct Public(pub [u8; 32]);
 
 /// A key pair.
 #[cfg(feature = "full_crypto")]
+#[derive(Clone)]
 pub struct Pair(SigningKey);
 
 impl FromEntropy for Public {
@@ -239,10 +240,10 @@ impl TraitPublic for Public {
 	/// Verify a signature on a message.
 	///
 	/// Returns true if the signature is good.
-	fn verify(&self, sig: &Signature, message: impl AsRef<[u8]>) -> bool {
+	fn verify(&self, sig: &Signature, message: &[u8]) -> bool {
 		let Ok(public) = VerificationKey::try_from(self.0) else { return false };
 		let Ok(signature) = ed25519_zebra::Signature::try_from(sig.as_ref()) else { return false };
-		public.verify(&signature, message.as_ref()).is_ok()
+		public.verify(&signature, message).is_ok()
 	}
 }
 
@@ -420,8 +421,8 @@ mod test {
 		let message = array_bytes::hex2bytes_unchecked("2f8c6129d816cf51c374bc7f08c3e63ed156cf78aefb4a6550d97b87997977ee00000000000000000200d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a4500000000000000");
 		let signature = pair.sign(&message[..]);
 		println!("Correct signature: {:?}", signature);
-		assert!(public.verify(&signature, message));
-		assert!(!public.verify(&signature, "Other message"));
+		assert!(public.verify(&signature, &message));
+		assert!(!public.verify(&signature, b"Other message"));
 	}
 
 	#[test]
@@ -467,7 +468,7 @@ mod test {
 		// Signature is 64 bytes, so 128 chars + 2 quote chars
 		assert_eq!(serialized_signature.len(), 130);
 		let signature = serde_json::from_str(&serialized_signature).unwrap();
-		assert!(pair.public().verify(&signature, &message));
+		assert!(pair.public().verify(&signature, message));
 	}
 
 	#[test]

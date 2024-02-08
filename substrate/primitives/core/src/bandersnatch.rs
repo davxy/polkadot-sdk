@@ -81,8 +81,8 @@ pub struct Public(pub [u8; PUBLIC_SERIALIZED_SIZE]);
 impl_byte_array!(Public, PUBLIC_SERIALIZED_SIZE);
 
 impl TraitPublic for Public {
-	fn verify(&self, signature: &Signature, data: impl AsRef<[u8]>) -> bool {
-		let data = vrf::VrfSignData::new_unchecked(SIGNING_CTX, &[data.as_ref()], None);
+	fn verify(&self, signature: &Signature, data: &[u8]) -> bool {
+		let data = vrf::VrfSignData::new_unchecked(SIGNING_CTX, &[data], None);
 		let signature =
 			vrf::VrfSignature { signature: *signature, pre_outputs: vrf::VrfIosVec::default() };
 		self.vrf_verify(&data, &signature)

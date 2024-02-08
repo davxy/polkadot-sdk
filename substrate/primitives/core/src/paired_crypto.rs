@@ -308,7 +308,7 @@ impl<LeftPublic: PublicT, RightPublic: PublicT, const LEFT_PLUS_RIGHT_LEN: usize
 where
 	Public<LeftPublic, RightPublic, LEFT_PLUS_RIGHT_LEN>: CryptoType<Public = Self>,
 {
-	fn verify(&self, sig: &Self::Signature, message: impl AsRef<[u8]>) -> bool {
+	fn verify(&self, sig: &Self::Signature, message: &[u8]) -> bool {
 		let left_sig_len = <LeftPublic::Signature as ByteArray>::LEN;
 		let Ok(left_pub): Result<LeftPublic, _> = self.inner[..LeftPublic::LEN].try_into() else {
 			return false
@@ -594,7 +594,7 @@ mod test {
 		);
 		let signature = Signature::unchecked_from(signature);
 		assert!(pair.sign(&message[..]) == signature);
-		assert!(Pair::verify(&signature, &message[..], &public));
+		assert!(public.verify(&signature, &message[..]));
 	}
 
 	#[test]
@@ -618,7 +618,7 @@ mod test {
 	);
 		let signature = Signature::unchecked_from(signature);
 		assert!(pair.sign(&message[..]) == signature);
-		assert!(Pair::verify(&signature, &message[..], &public));
+		assert!(public.verify(&signature, &message[..]));
 	}
 
 	#[test]
@@ -627,8 +627,8 @@ mod test {
 		let public = pair.public();
 		let message = b"Something important";
 		let signature = pair.sign(&message[..]);
-		assert!(Pair::verify(&signature, &message[..], &public));
-		assert!(!Pair::verify(&signature, b"Something else", &public));
+		assert!(public.verify(&signature, &message[..]));
+		assert!(!public.verify(&signature, b"Something else"));
 	}
 
 	#[test]
@@ -647,8 +647,8 @@ mod test {
 	    );
 		let signature = pair.sign(&message[..]);
 		println!("Correct signature: {:?}", signature);
-		assert!(Pair::verify(&signature, &message[..], &public));
-		assert!(!Pair::verify(&signature, "Other message", &public));
+		assert!(public.verify(&signature, &message[..]));
+		assert!(!public.verify(&signature, b"Other message"));
 	}
 
 	#[test]
@@ -708,7 +708,7 @@ mod test {
 		// Signature is 177 bytes, hexify * 2 + 2 quote charsy
 		assert_eq!(serialized_signature.len(), 356);
 		let signature = serde_json::from_str(&serialized_signature).unwrap();
-		assert!(Pair::verify(&signature, message, &pair.public()));
+		assert!(pair.public().verify(&signature, message));
 	}
 
 	#[test]

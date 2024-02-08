@@ -292,10 +292,10 @@ impl Public {
 impl_byte_array!(Public, 32);
 
 impl TraitPublic for Public {
-	fn verify(&self, sig: &Signature, message: impl AsRef<[u8]>) -> bool {
+	fn verify(&self, sig: &Signature, message: &[u8]) -> bool {
 		let Ok(public) = PublicKey::from_bytes(self.as_ref()) else { return false };
 		let Ok(signature) = schnorrkel::Signature::from_bytes(sig.as_ref()) else { return false };
-		public.verify_simple(SIGNING_CTX, message.as_ref(), &signature).is_ok()
+		public.verify_simple(SIGNING_CTX, message, &signature).is_ok()
 	}
 }
 
@@ -879,7 +879,7 @@ mod tests {
 		let public = pair.public();
 		let message = b"Something important";
 		let signature = pair.sign(message);
-		assert!(!public.verify(&signature, &b"Something unimportant"));
+		assert!(!public.verify(&signature, b"Something unimportant"));
 	}
 
 	#[test]
@@ -894,7 +894,7 @@ mod tests {
 		);
 		let message = array_bytes::hex2bytes_unchecked("2f8c6129d816cf51c374bc7f08c3e63ed156cf78aefb4a6550d97b87997977ee00000000000000000200d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a4500000000000000");
 		let signature = pair.sign(&message);
-		assert!(public.verify(&signature, message));
+		assert!(public.verify(&signature, &message));
 	}
 
 	#[test]
@@ -933,7 +933,7 @@ mod tests {
 		// Signature is 64 bytes, so 128 chars + 2 quote chars
 		assert_eq!(serialized_signature.len(), 130);
 		let signature = serde_json::from_str(&serialized_signature).unwrap();
-		assert!(pair.public().verify(&signature, &message));
+		assert!(pair.public().verify(&signature, message));
 	}
 
 	#[test]

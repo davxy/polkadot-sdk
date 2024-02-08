@@ -17,7 +17,6 @@
 
 //! Cryptographic utilities.
 
-use crate::{ed25519, sr25519};
 #[cfg(feature = "std")]
 use bip39::{Language, Mnemonic};
 use codec::{Decode, Encode, MaxEncodedLen};
@@ -37,6 +36,8 @@ use sp_std::{
 	vec,
 };
 use sp_std::{hash::Hash, str, vec::Vec};
+
+pub use crate::{ecdsa, ed25519, sr25519};
 pub use ss58_registry::{from_known_address_format, Ss58AddressFormat, Ss58AddressFormatRegistry};
 /// Trait to zeroize a memory buffer.
 pub use zeroize::Zeroize;
@@ -500,7 +501,7 @@ pub trait Public:
 	/// Verify a signature on a message.
 	///
 	/// Returns true if the signature is good.
-	fn verify(&self, sig: &Self::Signature, message: impl AsRef<[u8]>) -> bool;
+	fn verify(&self, sig: &Self::Signature, message: &[u8]) -> bool;
 }
 
 /// An opaque 32-byte cryptographic identifier.
@@ -668,7 +669,7 @@ mod dummy {
 	}
 
 	impl Public for Dummy {
-		fn verify(&self, _: &Dummy, _: impl AsRef<[u8]>) -> bool {
+		fn verify(&self, _: &Dummy, _: &[u8]) -> bool {
 			true
 		}
 	}
@@ -890,7 +891,7 @@ pub trait Pair: CryptoType<Pair = Self> + Sized {
 	/// TODO: Deprecated use `Public::verify()`
 	#[deprecated(note = "Use Public::verify() instead")]
 	fn verify(sig: &Self::Signature, message: impl AsRef<[u8]>, public: &Self::Public) -> bool {
-		public.verify(sig, message)
+		public.verify(sig, message.as_ref())
 	}
 
 	/// Get the public key.
@@ -1016,7 +1017,7 @@ pub trait Signature: CryptoType<Signature = Self> + ByteArray {
 	/// Verify a signature on a message.
 	///
 	/// Returns true if the signature is good.
-	fn verify(&self, public: &Self::Public, message: impl AsRef<[u8]>) -> bool {
+	fn verify(&self, public: &Self::Public, message: &[u8]) -> bool {
 		public.verify(self, message)
 	}
 }
@@ -1422,7 +1423,7 @@ mod tests {
 	impl_byte_array!(TestPublic, 0);
 
 	impl Public for TestPublic {
-		fn verify(&self, _: &TestSignature, _: impl AsRef<[u8]>) -> bool {
+		fn verify(&self, _: &TestSignature, _: &[u8]) -> bool {
 			true
 		}
 	}

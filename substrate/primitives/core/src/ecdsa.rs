@@ -128,7 +128,7 @@ impl Public {
 	/// Returns true if the signature is good.
 	/// Parses Signature using parse_overflowing_slice.
 	#[deprecated(note = "please use `verify` instead")]
-	pub fn verify_deprecated(&self, sig: &Signature, message: impl AsRef<[u8]>) -> bool {
+	pub fn verify_deprecated(&self, sig: &Signature, message: &[u8]) -> bool {
 		let message =
 			libsecp256k1::Message::parse(&sp_crypto_hashing::blake2_256(message.as_ref()));
 
@@ -152,7 +152,7 @@ impl Public {
 impl_byte_array!(Public, PUBLIC_KEY_SERIALIZED_SIZE);
 
 impl TraitPublic for Public {
-	fn verify(&self, sig: &Signature, message: impl AsRef<[u8]>) -> bool {
+	fn verify(&self, sig: &Signature, message: &[u8]) -> bool {
 		sig.recover(message).map(|actual| actual == *self).unwrap_or_default()
 	}
 }
@@ -273,8 +273,8 @@ impl Signature {
 	}
 
 	/// Recover the public key from this signature and a message.
-	pub fn recover(&self, message: impl AsRef<[u8]>) -> Option<Public> {
-		self.recover_prehashed(&sp_crypto_hashing::blake2_256(message.as_ref()))
+	pub fn recover(&self, message: &[u8]) -> Option<Public> {
+		self.recover_prehashed(&sp_crypto_hashing::blake2_256(message))
 	}
 
 	/// Recover the public key from this signature and a pre-hashed message.
@@ -419,7 +419,7 @@ impl Pair {
 	#[deprecated(note = "please use `Public::verify` instead")]
 	pub fn verify_deprecated(sig: &Signature, message: impl AsRef<[u8]>, public: &Public) -> bool {
 		#[allow(deprecated)]
-		public.verify_deprecated(sig, message)
+		public.verify_deprecated(sig, message.as_ref())
 	}
 }
 
@@ -512,8 +512,8 @@ mod test {
 		let message = b"";
 		let signature = array_bytes::hex2array_unchecked("3dde91174bd9359027be59a428b8146513df80a2a3c7eda2194f64de04a69ab97b753169e94db6ffd50921a2668a48b94ca11e3d32c1ff19cfe88890aa7e8f3c00");
 		let signature = Signature::from_raw(signature);
-		assert!(pair.sign(&message[..]) == signature);
-		assert!(Pair::verify(&signature, &message[..], &public));
+		assert!(pair.sign(message) == signature);
+		assert!(public.verify(&signature, message));
 	}
 
 	#[test]
@@ -521,9 +521,9 @@ mod test {
 		let (pair, _) = Pair::generate();
 		let public = pair.public();
 		let message = b"Something important";
-		let signature = pair.sign(&message[..]);
-		assert!(Pair::verify(&signature, &message[..], &public));
-		assert!(!Pair::verify(&signature, b"Something else", &public));
+		let signature = pair.sign(message);
+		assert!(public.verify(&signature, message));
+		assert!(!public.verify(&signature, b"Something else"));
 	}
 
 	#[test]
@@ -537,10 +537,10 @@ mod test {
 			).unwrap(),
 		);
 		let message = array_bytes::hex2bytes_unchecked("2f8c6129d816cf51c374bc7f08c3e63ed156cf78aefb4a6550d97b87997977ee00000000000000000200d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a4500000000000000");
-		let signature = pair.sign(&message[..]);
+		let signature = pair.sign(&message);
 		println!("Correct signature: {:?}", signature);
-		assert!(Pair::verify(&signature, &message[..], &public));
-		assert!(!Pair::verify(&signature, "Other message", &public));
+		assert!(public.verify(&signature, &message));
+		assert!(!public.verify(&signature, b"Other message"));
 	}
 
 	#[test]
@@ -646,7 +646,7 @@ mod test {
 		// Signature is 65 bytes, so 130 chars + 2 quote chars
 		assert_eq!(serialized_signature.len(), SIGNATURE_SERIALIZED_SIZE * 2 + 2);
 		let signature = serde_json::from_str(&serialized_signature).unwrap();
-		assert!(Pair::verify(&signature, &message[..], &pair.public()));
+		assert!(pair.public().verify(&signature, message));
 	}
 
 	#[test]

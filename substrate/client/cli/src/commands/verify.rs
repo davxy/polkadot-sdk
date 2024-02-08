@@ -20,7 +20,7 @@
 
 use crate::{error, params::MessageParams, utils, with_crypto_scheme, CryptoSchemeFlag};
 use clap::Parser;
-use sp_core::crypto::{ByteArray, Ss58Codec};
+use sp_core::crypto::{ByteArray, Pair as TraitPair, Public as TraitPublic, Ss58Codec};
 use std::io::BufRead;
 
 /// The `verify` command
@@ -74,7 +74,7 @@ impl VerifyCmd {
 
 fn verify<Pair>(sig_data: Vec<u8>, message: Vec<u8>, uri: &str) -> error::Result<()>
 where
-	Pair: sp_core::Pair,
+	Pair: TraitPair,
 	Pair::Signature: for<'a> TryFrom<&'a [u8]>,
 {
 	let signature =
@@ -87,7 +87,7 @@ where
 		Pair::Public::from_string(uri)?
 	};
 
-	if Pair::verify(&signature, &message, &pubkey) {
+	if pubkey.verify(&signature, &message) {
 		println!("Signature verifies correctly.");
 	} else {
 		return Err(error::Error::SignatureInvalid)

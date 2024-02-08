@@ -46,11 +46,9 @@ use sc_network::{
 	event::DhtEvent, KademliaKey, NetworkDHTProvider, NetworkSigner, NetworkStateInfo, Signature,
 };
 use sp_api::{ApiError, ProvideRuntimeApi};
-use sp_authority_discovery::{
-	AuthorityDiscoveryApi, AuthorityId, AuthorityPair, AuthoritySignature,
-};
+use sp_authority_discovery::{AuthorityDiscoveryApi, AuthorityId, AuthoritySignature};
 use sp_blockchain::HeaderBackend;
-use sp_core::crypto::{key_types, ByteArray, Pair};
+use sp_core::crypto::{key_types, ByteArray, Public};
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::traits::Block as BlockT;
 
@@ -516,7 +514,7 @@ where
 				let auth_signature = AuthoritySignature::decode(&mut &auth_signature[..])
 					.map_err(Error::EncodingDecodingScale)?;
 
-				if !AuthorityPair::verify(&auth_signature, &record, &authority_id) {
+				if !authority_id.verify(&auth_signature, &record) {
 					return Err(Error::VerifyingDhtPayload)
 				}
 

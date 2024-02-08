@@ -282,7 +282,7 @@ macro_rules! app_crypto_public_common {
 		$crate::app_crypto_public_common_if_serde!();
 
 		impl $crate::Public for Public {
-			fn verify(&self, sig: &Self::Signature, message: impl AsRef<[u8]>) -> bool {
+			fn verify(&self, sig: &Self::Signature, message: &[u8]) -> bool {
 				self.0.verify(&sig.0, message)
 			}
 		}
