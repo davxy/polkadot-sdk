@@ -236,12 +236,12 @@ impl Public {
 	///
 	/// NOTE: No checking goes on to ensure this is a real public key. Only use it if
 	/// you are certain that the array actually is a pubkey. GIGO!
-	pub fn from_raw(data: [u8; 32]) -> Self {
+	pub fn from_raw(data: [u8; PUBLIC_KEY_SERIALIZED_SIZE]) -> Self {
 		Public(data)
 	}
 
 	/// Return a slice filled with raw data.
-	pub fn as_array_ref(&self) -> &[u8; 32] {
+	pub fn as_array_ref(&self) -> &[u8; PUBLIC_KEY_SERIALIZED_SIZE] {
 		self.as_ref()
 	}
 }
@@ -301,9 +301,7 @@ impl TraitPair for Pair {
 
 	/// Get the public key.
 	fn public(&self) -> Public {
-		let mut pk = [0u8; 32];
-		pk.copy_from_slice(&self.0.public.to_bytes());
-		Public(pk)
+		Public(self.0.public.to_bytes())
 	}
 
 	/// Make a new key pair from raw secret seed material.
