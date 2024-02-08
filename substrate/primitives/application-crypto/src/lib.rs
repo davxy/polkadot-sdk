@@ -29,7 +29,7 @@ pub use sp_core::crypto::{DeriveJunction, Ss58Codec};
 #[doc(hidden)]
 pub use sp_core::{
 	self,
-	crypto::{ByteArray, CryptoType, Derive, IsWrappedBy, Public, UncheckedFrom, Wraps},
+	crypto::{ByteArray, CryptoType, Derive, IsWrappedBy, Public, Signature, UncheckedFrom, Wraps},
 	RuntimeDebug,
 };
 
@@ -126,18 +126,17 @@ macro_rules! app_crypto_pair {
 	($pair:ty, $key_type:expr, $crypto_type:expr) => {
 		$crate::wrap! {
 			/// A generic `AppPublic` wrapper type over $pair crypto; this has no specific App.
-			#[derive(Clone)]
 			pub struct Pair($pair);
 		}
 
 		impl $crate::CryptoType for Pair {
 			type Pair = Pair;
+			type Public = Public;
+			type Signature = Signature;
 		}
 
 		impl $crate::Pair for Pair {
-			type Public = Public;
 			type Seed = <$pair as $crate::Pair>::Seed;
-			type Signature = Signature;
 
 			$crate::app_crypto_pair_functions_if_std!($pair);
 
@@ -156,13 +155,6 @@ macro_rules! app_crypto_pair {
 			}
 			fn sign(&self, msg: &[u8]) -> Self::Signature {
 				Signature(self.0.sign(msg))
-			}
-			fn verify<M: AsRef<[u8]>>(
-				sig: &Self::Signature,
-				message: M,
-				pubkey: &Self::Public,
-			) -> bool {
-				<$pair>::verify(&sig.0, message, pubkey.as_ref())
 			}
 			fn public(&self) -> Self::Public {
 				Public(self.0.public())
@@ -228,22 +220,10 @@ macro_rules! app_crypto_pair_functions_if_std {
 #[macro_export]
 macro_rules! app_crypto_public_full_crypto {
 	($public:ty, $key_type:expr, $crypto_type:expr) => {
-		$crate::wrap! {
-			/// A generic `AppPublic` wrapper type over $public crypto; this has no specific App.
-			#[derive(
-				Clone, Eq, Hash, PartialEq, PartialOrd, Ord,
-				$crate::codec::Encode,
-				$crate::codec::Decode,
-				$crate::RuntimeDebug,
-				$crate::codec::MaxEncodedLen,
-				$crate::scale_info::TypeInfo,
-			)]
-			#[codec(crate = $crate::codec)]
-			pub struct Public($public);
-		}
-
 		impl $crate::CryptoType for Public {
 			type Pair = Pair;
+			type Public = Public;
+			type Signature = Signature;
 		}
 
 		impl $crate::AppCrypto for Public {
@@ -264,20 +244,10 @@ macro_rules! app_crypto_public_full_crypto {
 #[macro_export]
 macro_rules! app_crypto_public_not_full_crypto {
 	($public:ty, $key_type:expr, $crypto_type:expr) => {
-		$crate::wrap! {
-			/// A generic `AppPublic` wrapper type over $public crypto; this has no specific App.
-			#[derive(
-				Clone, Eq, PartialEq, Ord, PartialOrd,
-				$crate::codec::Encode,
-				$crate::codec::Decode,
-				$crate::RuntimeDebug,
-				$crate::codec::MaxEncodedLen,
-				$crate::scale_info::TypeInfo,
-			)]
-			pub struct Public($public);
+		impl $crate::CryptoType for Public {
+			type Public = Public;
+			type Signature = Signature;
 		}
-
-		impl $crate::CryptoType for Public {}
 
 		impl $crate::AppCrypto for Public {
 			type Public = Public;
@@ -295,7 +265,39 @@ macro_rules! app_crypto_public_not_full_crypto {
 #[macro_export]
 macro_rules! app_crypto_public_common {
 	($public:ty, $sig:ty, $key_type:expr, $crypto_type:expr) => {
+		$crate::wrap! {
+			/// A generic `AppPublic` wrapper type over $public crypto; this has no specific App.
+			#[derive(
+				Clone, Eq, Hash, PartialEq, PartialOrd, Ord,
+				$crate::codec::Encode,
+				$crate::codec::Decode,
+				$crate::RuntimeDebug,
+				$crate::codec::MaxEncodedLen,
+				$crate::scale_info::TypeInfo,
+			)]
+			#[codec(crate = $crate::codec)]
+			pub struct Public($public);
+		}
+
 		$crate::app_crypto_public_common_if_serde!();
+
+		impl $crate::Public for Public {
+			fn verify(&self, sig: &Self::Signature, message: impl AsRef<[u8]>) -> bool {
+				self.0.verify(&sig.0, message)
+			}
+		}
+
+		impl $crate::AppPublic for Public {
+			type Generic = $public;
+		}
+
+		impl<'a> TryFrom<&'a [u8]> for Public {
+			type Error = ();
+
+			fn try_from(data: &'a [u8]) -> Result<Self, Self::Error> {
+				<$public>::try_from(data).map(Into::into)
+			}
+		}
 
 		impl AsRef<[u8]> for Public {
 			fn as_ref(&self) -> &[u8] {
@@ -311,20 +313,6 @@ macro_rules! app_crypto_public_common {
 
 		impl $crate::ByteArray for Public {
 			const LEN: usize = <$public>::LEN;
-		}
-
-		impl $crate::Public for Public {}
-
-		impl $crate::AppPublic for Public {
-			type Generic = $public;
-		}
-
-		impl<'a> TryFrom<&'a [u8]> for Public {
-			type Error = ();
-
-			fn try_from(data: &'a [u8]) -> Result<Self, Self::Error> {
-				<$public>::try_from(data).map(Into::into)
-			}
 		}
 
 		impl Public {
@@ -407,20 +395,10 @@ macro_rules! app_crypto_public_common_if_serde {
 #[macro_export]
 macro_rules! app_crypto_signature_full_crypto {
 	($sig:ty, $key_type:expr, $crypto_type:expr) => {
-		$crate::wrap! {
-			/// A generic `AppPublic` wrapper type over $public crypto; this has no specific App.
-			#[derive(Clone, Eq, PartialEq,
-				$crate::codec::Encode,
-				$crate::codec::Decode,
-				$crate::RuntimeDebug,
-				$crate::scale_info::TypeInfo,
-			)]
-			#[derive(Hash)]
-			pub struct Signature($sig);
-		}
-
 		impl $crate::CryptoType for Signature {
 			type Pair = Pair;
+			type Public = Public;
+			type Signature = Signature;
 		}
 
 		impl $crate::AppCrypto for Signature {
@@ -441,18 +419,10 @@ macro_rules! app_crypto_signature_full_crypto {
 #[macro_export]
 macro_rules! app_crypto_signature_not_full_crypto {
 	($sig:ty, $key_type:expr, $crypto_type:expr) => {
-		$crate::wrap! {
-			/// A generic `AppPublic` wrapper type over $public crypto; this has no specific App.
-			#[derive(Clone, Eq, PartialEq,
-				$crate::codec::Encode,
-				$crate::codec::Decode,
-				$crate::RuntimeDebug,
-				$crate::scale_info::TypeInfo,
-			)]
-			pub struct Signature($sig);
+		impl $crate::CryptoType for Signature {
+			type Public = Public;
+			type Signature = Signature;
 		}
-
-		impl $crate::CryptoType for Signature {}
 
 		impl $crate::AppCrypto for Signature {
 			type Public = Public;
@@ -470,6 +440,23 @@ macro_rules! app_crypto_signature_not_full_crypto {
 #[macro_export]
 macro_rules! app_crypto_signature_common {
 	($sig:ty, $key_type:expr) => {
+		$crate::wrap! {
+			/// A generic `AppPublic` wrapper type over $public crypto; this has no specific App.
+			#[derive(Clone, Eq, PartialEq, Hash,
+				$crate::codec::Encode,
+				$crate::codec::Decode,
+				$crate::RuntimeDebug,
+				$crate::scale_info::TypeInfo,
+			)]
+			pub struct Signature($sig);
+		}
+
+		impl $crate::Signature for Signature {}
+
+		impl $crate::ByteArray for Signature {
+			const LEN: usize = <$sig>::LEN;
+		}
+
 		impl $crate::Deref for Signature {
 			type Target = [u8];
 
@@ -481,6 +468,12 @@ macro_rules! app_crypto_signature_common {
 		impl AsRef<[u8]> for Signature {
 			fn as_ref(&self) -> &[u8] {
 				self.0.as_ref()
+			}
+		}
+
+		impl AsMut<[u8]> for Signature {
+			fn as_mut(&mut self) -> &mut [u8] {
+				self.0.as_mut()
 			}
 		}
 

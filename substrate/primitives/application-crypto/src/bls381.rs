@@ -15,7 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! BLS12-381 crypto applications.
+//! BLS12-381 crypto types.
 
 pub use sp_core::bls::bls381::*;
 
