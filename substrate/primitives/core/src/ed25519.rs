@@ -20,7 +20,6 @@
 #[cfg(feature = "full_crypto")]
 use sp_std::vec::Vec;
 
-use crate::hash::{H256, H512};
 use codec::{Decode, Encode, MaxEncodedLen};
 use core::hash::Hash;
 use scale_info::TypeInfo;
@@ -28,8 +27,8 @@ use scale_info::TypeInfo;
 #[cfg(feature = "serde")]
 use crate::crypto::Ss58Codec;
 use crate::crypto::{
-	impl_byte_array, impl_crypto_type, CryptoTypeId, Derive, FromEntropy, Public as TraitPublic,
-	Signature as SignatureTrait, UncheckedFrom,
+	impl_byte_array, impl_crypto_type, CryptoTypeId, Derive, Public as TraitPublic,
+	Signature as SignatureTrait,
 };
 #[cfg(feature = "full_crypto")]
 use crate::crypto::{DeriveError, DeriveJunction, Pair as TraitPair, SecretStringError};
@@ -44,8 +43,14 @@ use sp_runtime_interface::pass_by::PassByInner;
 #[cfg(all(not(feature = "std"), feature = "serde"))]
 use sp_std::alloc::{format, string::String};
 
-/// An identifier used to match public keys against ed25519 keys
+/// An identifier used to match public keys against ed25519 keys.
 pub const CRYPTO_ID: CryptoTypeId = CryptoTypeId(*b"ed25");
+
+/// The byte length of public key.
+pub const PUBLIC_KEY_SERIALIZED_SIZE: usize = 32;
+
+/// The byte length of signature.
+pub const SIGNATURE_SERIALIZED_SIZE: usize = 64;
 
 /// A secret seed. It's not called a "secret key" because ring doesn't expose the secret keys
 /// of the key pair (yeah, dumb); as such we're forced to remember the seed manually if we
@@ -68,31 +73,17 @@ type Seed = [u8; 32];
 	TypeInfo,
 	Hash,
 )]
-pub struct Public(pub [u8; 32]);
+pub struct Public(pub [u8; PUBLIC_KEY_SERIALIZED_SIZE]);
 
 /// A key pair.
 #[cfg(feature = "full_crypto")]
 #[derive(Clone)]
 pub struct Pair(SigningKey);
 
-impl FromEntropy for Public {
-	fn from_entropy(input: &mut impl codec::Input) -> Result<Self, codec::Error> {
-		let mut result = Self([0u8; 32]);
-		input.read(&mut result.0[..])?;
-		Ok(result)
-	}
-}
-
 #[cfg(feature = "full_crypto")]
 impl From<Pair> for Public {
 	fn from(x: Pair) -> Self {
 		x.public()
-	}
-}
-
-impl From<Public> for H256 {
-	fn from(x: Public) -> Self {
-		x.0.into()
 	}
 }
 
@@ -102,12 +93,6 @@ impl std::str::FromStr for Public {
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		Self::from_ss58check(s)
-	}
-}
-
-impl UncheckedFrom<H256> for Public {
-	fn unchecked_from(x: H256) -> Self {
-		Public::from_h256(x)
 	}
 }
 
@@ -156,9 +141,9 @@ impl<'de> Deserialize<'de> for Public {
 #[derive(
 	Copy, Clone, Encode, Decode, MaxEncodedLen, PassByInner, TypeInfo, PartialEq, Eq, Hash,
 )]
-pub struct Signature(pub [u8; 64]);
+pub struct Signature(pub [u8; SIGNATURE_SERIALIZED_SIZE]);
 
-impl_byte_array!(Signature, 64);
+impl_byte_array!(Signature, SIGNATURE_SERIALIZED_SIZE);
 
 #[cfg(feature = "serde")]
 impl Serialize for Signature {
@@ -183,12 +168,6 @@ impl<'de> Deserialize<'de> for Signature {
 	}
 }
 
-impl From<Signature> for H512 {
-	fn from(v: Signature) -> H512 {
-		H512::from(v.0)
-	}
-}
-
 impl sp_std::fmt::Debug for Signature {
 	#[cfg(feature = "std")]
 	fn fmt(&self, f: &mut sp_std::fmt::Formatter) -> sp_std::fmt::Result {
@@ -201,16 +180,6 @@ impl sp_std::fmt::Debug for Signature {
 	}
 }
 
-impl Signature {
-	/// A new instance from an H512.
-	///
-	/// NOTE: No checking goes on to ensure this is a real signature. Only use it if
-	/// you are certain that the array actually is a signature. GIGO!
-	pub fn from_h512(v: H512) -> Signature {
-		Signature(v.into())
-	}
-}
-
 impl Public {
 	/// A new instance from the given 32-byte `data`.
 	///
@@ -220,21 +189,13 @@ impl Public {
 		Public(data)
 	}
 
-	/// A new instance from an H256.
-	///
-	/// NOTE: No checking goes on to ensure this is a real public key. Only use it if
-	/// you are certain that the array actually is a pubkey. GIGO!
-	pub fn from_h256(x: H256) -> Self {
-		Public(x.into())
-	}
-
 	/// Return a slice filled with raw data.
 	pub fn as_array_ref(&self) -> &[u8; 32] {
 		self.as_ref()
 	}
 }
 
-impl_byte_array!(Public, 32);
+impl_byte_array!(Public, PUBLIC_KEY_SERIALIZED_SIZE);
 
 impl TraitPublic for Public {
 	/// Verify a signature on a message.
@@ -253,8 +214,9 @@ impl Derive for Public {}
 impl TraitPair for Pair {
 	type Seed = Seed;
 
-	/// Make a new key pair from secret seed material. The slice must be 32 bytes long or it
-	/// will return `None`.
+	/// Make a new key pair from secret seed material.
+	///
+	/// The slice must be 32 bytes long or it will return `None`.
 	///
 	/// You should never need to use this; generate(), generate_with_phrase
 	fn from_seed_slice(seed_slice: &[u8]) -> Result<Pair, SecretStringError> {

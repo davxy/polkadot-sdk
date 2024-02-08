@@ -79,14 +79,6 @@ type Seed = [u8; 32];
 )]
 pub struct Public(pub [u8; PUBLIC_KEY_SERIALIZED_SIZE]);
 
-impl crate::crypto::FromEntropy for Public {
-	fn from_entropy(input: &mut impl codec::Input) -> Result<Self, codec::Error> {
-		let mut result = Self([0u8; PUBLIC_KEY_SERIALIZED_SIZE]);
-		input.read(&mut result.0[..])?;
-		Ok(result)
-	}
-}
-
 impl Public {
 	/// A new instance from the given 33-byte `data`.
 	///
@@ -264,12 +256,7 @@ impl Signature {
 	/// NOTE: No checking goes on to ensure this is a real signature. Only use it if
 	/// you are certain that the array actually is a signature. GIGO!
 	pub fn from_slice(data: &[u8]) -> Option<Self> {
-		if data.len() != SIGNATURE_SERIALIZED_SIZE {
-			return None
-		}
-		let mut r = [0u8; SIGNATURE_SERIALIZED_SIZE];
-		r.copy_from_slice(data);
-		Some(Signature(r))
+		Signature::try_from(data).ok()
 	}
 
 	/// Recover the public key from this signature and a message.

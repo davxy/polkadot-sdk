@@ -341,6 +341,7 @@ pub enum MultiSigner {
 
 impl FromEntropy for MultiSigner {
 	fn from_entropy(input: &mut impl codec::Input) -> Result<Self, codec::Error> {
+		// This buffer must be large enough to accomodate the larger seed of the supported crypto.
 		Ok(match input.read_byte()? % 3 {
 			0 => Self::Ed25519(FromEntropy::from_entropy(input)?),
 			1 => Self::Sr25519(FromEntropy::from_entropy(input)?),
@@ -353,7 +354,7 @@ impl FromEntropy for MultiSigner {
 /// we convert the hash into some AccountId, it's fine to use any scheme.
 impl<T: Into<H256>> crypto::UncheckedFrom<T> for MultiSigner {
 	fn unchecked_from(x: T) -> Self {
-		ed25519::Public::unchecked_from(x.into()).into()
+		ed25519::Public::unchecked_from(x.into().0).into()
 	}
 }
 
@@ -488,13 +489,13 @@ impl Verify for AnySignature {
 
 impl From<sr25519::Signature> for AnySignature {
 	fn from(s: sr25519::Signature) -> Self {
-		Self(s.into())
+		Self(H512::from(s.as_ref()))
 	}
 }
 
 impl From<ed25519::Signature> for AnySignature {
 	fn from(s: ed25519::Signature) -> Self {
-		Self(s.into())
+		Self(H512::from(s.as_ref()))
 	}
 }
 

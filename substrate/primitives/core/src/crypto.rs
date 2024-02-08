@@ -605,13 +605,6 @@ impl sp_std::str::FromStr for AccountId32 {
 	}
 }
 
-/// Creates an [`AccountId32`] from the input, which should contain at least 32 bytes.
-impl FromEntropy for AccountId32 {
-	fn from_entropy(input: &mut impl codec::Input) -> Result<Self, codec::Error> {
-		Ok(AccountId32::new(FromEntropy::from_entropy(input)?))
-	}
-}
-
 #[cfg(feature = "std")]
 pub use self::dummy::*;
 
@@ -1148,6 +1141,15 @@ macro_rules! impl_byte_array {
 				$struct_name(raw)
 			}
 		}
+
+		impl $crate::crypto::FromEntropy for $struct_name {
+			fn from_entropy(input: &mut impl codec::Input) -> Result<Self, codec::Error> {
+				let buf = $crate::crypto::FromEntropy::from_entropy(input)?;
+				Ok(<$struct_name as $crate::crypto::UncheckedFrom<[u8; $size]>>::unchecked_from(
+					buf,
+				))
+			}
+		}
 	};
 }
 pub(crate) use impl_byte_array;
@@ -1314,8 +1316,9 @@ macro_rules! impl_from_entropy_base {
 			[$type; 9], [$type; 10], [$type; 11], [$type; 12], [$type; 13], [$type; 14], [$type; 15], [$type; 16],
 			[$type; 17], [$type; 18], [$type; 19], [$type; 20], [$type; 21], [$type; 22], [$type; 23], [$type; 24],
 			[$type; 25], [$type; 26], [$type; 27], [$type; 28], [$type; 29], [$type; 30], [$type; 31], [$type; 32],
-			[$type; 36], [$type; 40], [$type; 44], [$type; 48], [$type; 56], [$type; 64], [$type; 72], [$type; 80],
-			[$type; 96], [$type; 112], [$type; 128], [$type; 160], [$type; 177], [$type; 192], [$type; 224], [$type; 256]
+			[$type; 33], [$type; 36], [$type; 40], [$type; 44], [$type; 48], [$type; 56], [$type; 64], [$type; 65],
+			[$type; 72], [$type; 80], [$type; 96], [$type; 112], [$type; 128], [$type; 160], [$type; 177], [$type; 192],
+			[$type; 224], [$type; 256]
 		);
 	}
 }

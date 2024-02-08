@@ -19,6 +19,7 @@
 //!
 //! Note: `CHAIN_CODE_LENGTH` must be equal to `crate::crypto::JUNCTION_ID_LEN`
 //! for this to work.
+
 #[cfg(any(feature = "full_crypto", feature = "serde"))]
 use crate::crypto::DeriveJunction;
 #[cfg(feature = "serde")]
@@ -34,12 +35,9 @@ use schnorrkel::{
 };
 use sp_std::vec::Vec;
 
-use crate::{
-	crypto::{
-		impl_byte_array, impl_crypto_type, CryptoTypeId, Derive, FromEntropy,
-		Public as TraitPublic, Signature as SignatureTrait, UncheckedFrom,
-	},
-	hash::{H256, H512},
+use crate::crypto::{
+	impl_byte_array, impl_crypto_type, CryptoTypeId, Derive, Public as TraitPublic,
+	Signature as SignatureTrait,
 };
 
 use codec::{Decode, Encode, MaxEncodedLen};
@@ -60,6 +58,12 @@ const SIGNING_CTX: &[u8] = b"substrate";
 /// An identifier used to match public keys against sr25519 keys
 pub const CRYPTO_ID: CryptoTypeId = CryptoTypeId(*b"sr25");
 
+/// The byte length of public key.
+pub const PUBLIC_KEY_SERIALIZED_SIZE: usize = 32;
+
+/// The byte length of signature.
+pub const SIGNATURE_SERIALIZED_SIZE: usize = 64;
+
 /// An Schnorrkel/Ristretto x25519 ("sr25519") public key.
 #[derive(
 	PartialEq,
@@ -75,7 +79,7 @@ pub const CRYPTO_ID: CryptoTypeId = CryptoTypeId(*b"sr25");
 	TypeInfo,
 	Hash,
 )]
-pub struct Public(pub [u8; 32]);
+pub struct Public(pub [u8; PUBLIC_KEY_SERIALIZED_SIZE]);
 
 /// An Schnorrkel/Ristretto x25519 ("sr25519") key pair.
 #[cfg(feature = "full_crypto")]
@@ -92,32 +96,12 @@ impl Clone for Pair {
 	}
 }
 
-impl FromEntropy for Public {
-	fn from_entropy(input: &mut impl codec::Input) -> Result<Self, codec::Error> {
-		let mut result = Self([0u8; 32]);
-		input.read(&mut result.0[..])?;
-		Ok(result)
-	}
-}
-
-impl From<Public> for H256 {
-	fn from(x: Public) -> H256 {
-		x.0.into()
-	}
-}
-
 #[cfg(feature = "std")]
 impl std::str::FromStr for Public {
 	type Err = crate::crypto::PublicError;
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		Self::from_ss58check(s)
-	}
-}
-
-impl UncheckedFrom<H256> for Public {
-	fn unchecked_from(x: H256) -> Self {
-		Public::from_h256(x)
 	}
 }
 
@@ -164,9 +148,9 @@ impl<'de> Deserialize<'de> for Public {
 
 /// An Schnorrkel/Ristretto x25519 ("sr25519") signature.
 #[derive(Clone, Hash, Encode, Decode, MaxEncodedLen, PassByInner, TypeInfo, PartialEq, Eq)]
-pub struct Signature(pub [u8; 64]);
+pub struct Signature(pub [u8; SIGNATURE_SERIALIZED_SIZE]);
 
-impl_byte_array!(Signature, 64);
+impl_byte_array!(Signature, SIGNATURE_SERIALIZED_SIZE);
 
 #[cfg(feature = "serde")]
 impl Serialize for Signature {
@@ -188,12 +172,6 @@ impl<'de> Deserialize<'de> for Signature {
 			.map_err(|e| de::Error::custom(format!("{:?}", e)))?;
 		Signature::try_from(signature_hex.as_ref())
 			.map_err(|e| de::Error::custom(format!("{:?}", e)))
-	}
-}
-
-impl From<Signature> for H512 {
-	fn from(v: Signature) -> H512 {
-		H512::from(v.0)
 	}
 }
 
@@ -223,7 +201,7 @@ impl Signature {
 	/// it if you are certain that the array actually is a signature, or if you
 	/// immediately verify the signature.  All functions that verify signatures
 	/// will fail if the `Signature` is not actually a valid signature.
-	pub fn from_raw(data: [u8; 64]) -> Signature {
+	pub fn from_raw(data: [u8; SIGNATURE_SERIALIZED_SIZE]) -> Signature {
 		Signature(data)
 	}
 
@@ -232,20 +210,7 @@ impl Signature {
 	/// NOTE: No checking goes on to ensure this is a real signature. Only use it if
 	/// you are certain that the array actually is a signature. GIGO!
 	pub fn from_slice(data: &[u8]) -> Option<Self> {
-		if data.len() != 64 {
-			return None
-		}
-		let mut r = [0u8; 64];
-		r.copy_from_slice(data);
-		Some(Signature(r))
-	}
-
-	/// A new instance from an H512.
-	///
-	/// NOTE: No checking goes on to ensure this is a real signature. Only use it if
-	/// you are certain that the array actually is a signature. GIGO!
-	pub fn from_h512(v: H512) -> Signature {
-		Signature(v.into())
+		Signature::try_from(data).ok()
 	}
 }
 
@@ -273,14 +238,6 @@ impl Public {
 	/// you are certain that the array actually is a pubkey. GIGO!
 	pub fn from_raw(data: [u8; 32]) -> Self {
 		Public(data)
-	}
-
-	/// A new instance from an H256.
-	///
-	/// NOTE: No checking goes on to ensure this is a real public key. Only use it if
-	/// you are certain that the array actually is a pubkey. GIGO!
-	pub fn from_h256(x: H256) -> Self {
-		Public(x.into())
 	}
 
 	/// Return a slice filled with raw data.

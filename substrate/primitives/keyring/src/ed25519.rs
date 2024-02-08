@@ -19,6 +19,7 @@
 
 pub use sp_core::ed25519;
 use sp_core::{
+	crypto::UncheckedFrom,
 	ed25519::{Pair, Public, Signature},
 	hex2array, ByteArray, Pair as PairT, H256,
 };
@@ -53,19 +54,11 @@ impl Keyring {
 	}
 
 	pub fn from_raw_public(who: [u8; 32]) -> Option<Keyring> {
-		Self::from_public(&Public::from_raw(who))
+		Self::from_public(&Public::unchecked_from(who))
 	}
 
 	pub fn to_raw_public(self) -> [u8; 32] {
-		*Public::from(self).as_array_ref()
-	}
-
-	pub fn from_h256_public(who: H256) -> Option<Keyring> {
-		Self::from_public(&Public::from_raw(who.into()))
-	}
-
-	pub fn to_h256_public(self) -> H256 {
-		Public::from(self).as_array_ref().into()
+		Public::from(self).into()
 	}
 
 	pub fn to_raw_public_vec(self) -> Vec<u8> {
@@ -128,7 +121,7 @@ impl From<Keyring> for sp_runtime::MultiSigner {
 
 impl From<Keyring> for Public {
 	fn from(k: Keyring) -> Self {
-		Public::from_raw(k.into())
+		Public::unchecked_from(k.into())
 	}
 }
 
