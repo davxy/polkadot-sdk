@@ -84,7 +84,7 @@ use tracing;
 
 #[cfg(feature = "std")]
 use sp_core::{
-	crypto::Pair,
+	crypto::Public,
 	hexdisplay::HexDisplay,
 	offchain::{OffchainDbExt, OffchainWorkerExt, TransactionPoolExt},
 	storage::ChildInfo,
@@ -825,15 +825,15 @@ pub trait Crypto {
 		{
 			use ed25519_dalek::Verifier;
 
-			let Ok(public_key) = ed25519_dalek::VerifyingKey::from_bytes(&pub_key.0) else {
+			let Ok(pub_key) = ed25519_dalek::VerifyingKey::from_bytes(&pub_key.0) else {
 				return false
 			};
 
 			let sig = ed25519_dalek::Signature::from_bytes(&sig.0);
 
-			public_key.verify(msg, &sig).is_ok()
+			pub_key.verify(msg, &sig).is_ok()
 		} else {
-			ed25519::Pair::verify(sig, msg, pub_key)
+			pub_key.verify(sig, msg)
 		}
 	}
 
@@ -871,7 +871,7 @@ pub trait Crypto {
 	/// Returns `true` when the verification was successful.
 	#[version(2)]
 	fn sr25519_verify(sig: &sr25519::Signature, msg: &[u8], pub_key: &sr25519::Public) -> bool {
-		sr25519::Pair::verify(sig, msg, pub_key)
+		pub_key.verify(sig, msg)
 	}
 
 	/// Register a `sr25519` signature for batch verification.
@@ -982,7 +982,7 @@ pub trait Crypto {
 	/// Returns `true` when the verification in successful regardless of
 	/// signature version.
 	fn sr25519_verify(sig: &sr25519::Signature, msg: &[u8], pubkey: &sr25519::Public) -> bool {
-		sr25519::Pair::verify_deprecated(sig, msg, pubkey)
+		pubkey.verify_deprecated(sig, msg)
 	}
 
 	/// Returns all `ecdsa` public keys for the given key id from the keystore.
@@ -1046,7 +1046,7 @@ pub trait Crypto {
 	/// This version is able to handle, non-standard, overflowing signatures.
 	fn ecdsa_verify(sig: &ecdsa::Signature, msg: &[u8], pub_key: &ecdsa::Public) -> bool {
 		#[allow(deprecated)]
-		ecdsa::Pair::verify_deprecated(sig, msg, pub_key)
+		pub_key.verify_deprecated(sig, msg)
 	}
 
 	/// Verify `ecdsa` signature.
@@ -1054,7 +1054,7 @@ pub trait Crypto {
 	/// Returns `true` when the verification was successful.
 	#[version(2)]
 	fn ecdsa_verify(sig: &ecdsa::Signature, msg: &[u8], pub_key: &ecdsa::Public) -> bool {
-		ecdsa::Pair::verify(sig, msg, pub_key)
+		pub_key.verify(sig, msg)
 	}
 
 	/// Verify `ecdsa` signature with pre-hashed `msg`.
@@ -1065,7 +1065,7 @@ pub trait Crypto {
 		msg: &[u8; 32],
 		pub_key: &ecdsa::Public,
 	) -> bool {
-		ecdsa::Pair::verify_prehashed(sig, msg, pub_key)
+		pub_key.verify_prehashed(sig, msg)
 	}
 
 	/// Register a `ecdsa` signature for batch verification.
@@ -1839,7 +1839,7 @@ pub type SubstrateHostFunctions = (
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use sp_core::{crypto::UncheckedInto, map, storage::Storage};
+	use sp_core::{crypto::UncheckedFrom, map, storage::Storage};
 	use sp_state_machine::BasicExternalities;
 
 	#[test]
@@ -1933,11 +1933,11 @@ mod tests {
 	}
 
 	fn zero_ed_pub() -> ed25519::Public {
-		[0u8; 32].unchecked_into()
+		ed25519::Public::unchecked_from([0u8; 32])
 	}
 
 	fn zero_ed_sig() -> ed25519::Signature {
-		ed25519::Signature::from_raw([0u8; 64])
+		ed25519::Signature::unchecked_from([0u8; 64])
 	}
 
 	#[test]
@@ -1967,7 +1967,7 @@ mod tests {
 			bytes[63] = 0b1110_0000;
 
 			assert!(!crypto::ed25519_verify(
-				&ed25519::Signature::from_raw(bytes),
+				&ed25519::Signature::unchecked_from(bytes),
 				&Vec::new(),
 				&zero_ed_pub()
 			));
