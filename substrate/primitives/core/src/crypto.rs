@@ -17,7 +17,7 @@
 
 //! Cryptographic utilities.
 
-// use crate::{ed25519, sr25519};
+use crate::{ed25519, sr25519};
 #[cfg(feature = "std")]
 use bip39::{Language, Mnemonic};
 use codec::{Decode, Encode, MaxEncodedLen};
@@ -533,17 +533,17 @@ impl From<[u8; 32]> for AccountId32 {
 	}
 }
 
-// impl From<sr25519::Public> for AccountId32 {
-// 	fn from(k: sr25519::Public) -> Self {
-// 		k.0.into()
-// 	}
-// }
+impl From<sr25519::Public> for AccountId32 {
+	fn from(k: sr25519::Public) -> Self {
+		k.0.into()
+	}
+}
 
-// impl From<ed25519::Public> for AccountId32 {
-// 	fn from(k: ed25519::Public) -> Self {
-// 		k.0.into()
-// 	}
-// }
+impl From<ed25519::Public> for AccountId32 {
+	fn from(k: ed25519::Public) -> Self {
+		k.0.into()
+	}
+}
 
 #[cfg(feature = "std")]
 impl std::fmt::Display for AccountId32 {
