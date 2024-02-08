@@ -152,8 +152,9 @@ impl<'de> Deserialize<'de> for Public {
 }
 
 /// A signature (a 512-bit value).
-#[cfg_attr(feature = "full_crypto", derive(Hash))]
-#[derive(Copy, Clone, Encode, Decode, MaxEncodedLen, PassByInner, TypeInfo, PartialEq, Eq)]
+#[derive(
+	Copy, Clone, Encode, Decode, MaxEncodedLen, PassByInner, TypeInfo, PartialEq, Eq, Hash,
+)]
 pub struct Signature(pub [u8; 64]);
 
 impl_byte_array!(Signature, 64);

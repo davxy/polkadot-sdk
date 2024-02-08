@@ -347,9 +347,8 @@ impl<T> PartialEq for Signature<T> {
 
 impl<T> Eq for Signature<T> {}
 
-#[cfg(feature = "full_crypto")]
-impl<T> sp_std::hash::Hash for Signature<T> {
-	fn hash<H: sp_std::hash::Hasher>(&self, state: &mut H) {
+impl<T> core::hash::Hash for Signature<T> {
+	fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
 		self.inner.hash(state)
 	}
 }

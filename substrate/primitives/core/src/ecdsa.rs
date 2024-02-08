@@ -208,8 +208,7 @@ impl<'de> Deserialize<'de> for Public {
 }
 
 /// A signature (a 512-bit value, plus 8 bits for recovery ID).
-#[cfg_attr(feature = "full_crypto", derive(Hash))]
-#[derive(Clone, Encode, Decode, MaxEncodedLen, PassByInner, TypeInfo, PartialEq, Eq)]
+#[derive(Clone, Encode, Decode, MaxEncodedLen, PassByInner, TypeInfo, PartialEq, Eq, Hash)]
 pub struct Signature(pub [u8; SIGNATURE_SERIALIZED_SIZE]);
 
 impl TraitSignature for Signature {}
