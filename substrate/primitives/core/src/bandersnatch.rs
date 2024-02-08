@@ -37,6 +37,7 @@ use bandersnatch_vrfs::CanonicalSerialize;
 #[cfg(feature = "full_crypto")]
 use bandersnatch_vrfs::SecretKey;
 use codec::{Decode, Encode, EncodeLike, MaxEncodedLen};
+use core::hash::Hash;
 use scale_info::TypeInfo;
 
 use sp_runtime_interface::pass_by::PassByInner;
@@ -46,7 +47,6 @@ use sp_std::{vec, vec::Vec};
 pub const CRYPTO_ID: CryptoTypeId = CryptoTypeId(*b"band");
 
 /// Context used to produce a plain signature without any VRF input/output.
-#[cfg(feature = "full_crypto")]
 pub const SIGNING_CTX: &[u8] = b"BandersnatchSigningContext";
 
 #[cfg(feature = "full_crypto")]
@@ -56,10 +56,12 @@ const PUBLIC_SERIALIZED_SIZE: usize = 33;
 const SIGNATURE_SERIALIZED_SIZE: usize = 65;
 const PREOUT_SERIALIZED_SIZE: usize = 33;
 
+#[cfg(feature = "full_crypto")]
 impl_crypto_type!(Pair, Public, Signature);
+#[cfg(not(feature = "full_crypto"))]
+impl_crypto_type!(Public, Signature);
 
 /// Bandersnatch public key.
-#[cfg_attr(feature = "full_crypto", derive(Hash))]
 #[derive(
 	Clone,
 	Copy,
@@ -72,6 +74,7 @@ impl_crypto_type!(Pair, Public, Signature);
 	PassByInner,
 	MaxEncodedLen,
 	TypeInfo,
+	Hash,
 )]
 pub struct Public(pub [u8; PUBLIC_SERIALIZED_SIZE]);
 
@@ -120,8 +123,9 @@ impl<'de> Deserialize<'de> for Public {
 ///
 /// The signature is created via the [`VrfSecret::vrf_sign`] using [`SIGNING_CTX`] as transcript
 /// `label`.
-#[cfg_attr(feature = "full_crypto", derive(Hash))]
-#[derive(Clone, Copy, PartialEq, Eq, Encode, Decode, PassByInner, MaxEncodedLen, TypeInfo)]
+#[derive(
+	Clone, Copy, Hash, PartialEq, Eq, Encode, Decode, PassByInner, MaxEncodedLen, TypeInfo,
+)]
 pub struct Signature([u8; SIGNATURE_SERIALIZED_SIZE]);
 
 impl SignatureTrait for Signature {}

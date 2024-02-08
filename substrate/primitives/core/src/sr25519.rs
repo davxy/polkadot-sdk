@@ -25,14 +25,12 @@ use crate::crypto::DeriveJunction;
 use crate::crypto::Ss58Codec;
 #[cfg(feature = "full_crypto")]
 use crate::crypto::{DeriveError, Pair as TraitPair, SecretStringError};
+#[cfg(any(feature = "full_crypto", feature = "serde"))]
+use schnorrkel::derive::{ChainCode, Derivation};
+use schnorrkel::PublicKey;
 #[cfg(feature = "full_crypto")]
 use schnorrkel::{
 	derive::CHAIN_CODE_LENGTH, signing_context, ExpansionMode, Keypair, MiniSecretKey, SecretKey,
-};
-#[cfg(any(feature = "full_crypto", feature = "serde"))]
-use schnorrkel::{
-	derive::{ChainCode, Derivation},
-	PublicKey,
 };
 use sp_std::vec::Vec;
 
@@ -43,7 +41,9 @@ use crate::{
 	},
 	hash::{H256, H512},
 };
+
 use codec::{Decode, Encode, MaxEncodedLen};
+use core::hash::Hash;
 use scale_info::TypeInfo;
 
 #[cfg(feature = "full_crypto")]
@@ -54,15 +54,13 @@ use sp_runtime_interface::pass_by::PassByInner;
 #[cfg(all(not(feature = "std"), feature = "serde"))]
 use sp_std::alloc::{format, string::String};
 
-// signing context
-#[cfg(feature = "full_crypto")]
+// Signing context
 const SIGNING_CTX: &[u8] = b"substrate";
 
 /// An identifier used to match public keys against sr25519 keys
 pub const CRYPTO_ID: CryptoTypeId = CryptoTypeId(*b"sr25");
 
 /// An Schnorrkel/Ristretto x25519 ("sr25519") public key.
-#[cfg_attr(feature = "full_crypto", derive(Hash))]
 #[derive(
 	PartialEq,
 	Eq,
@@ -75,6 +73,7 @@ pub const CRYPTO_ID: CryptoTypeId = CryptoTypeId(*b"sr25");
 	PassByInner,
 	MaxEncodedLen,
 	TypeInfo,
+	Hash,
 )]
 pub struct Public(pub [u8; 32]);
 
@@ -164,8 +163,7 @@ impl<'de> Deserialize<'de> for Public {
 }
 
 /// An Schnorrkel/Ristretto x25519 ("sr25519") signature.
-#[cfg_attr(feature = "full_crypto", derive(Hash))]
-#[derive(Clone, Encode, Decode, MaxEncodedLen, PassByInner, TypeInfo, PartialEq, Eq)]
+#[derive(Clone, Hash, Encode, Decode, MaxEncodedLen, PassByInner, TypeInfo, PartialEq, Eq)]
 pub struct Signature(pub [u8; 64]);
 
 impl_byte_array!(Signature, 64);
@@ -426,7 +424,10 @@ impl Public {
 
 impl SignatureTrait for Signature {}
 
+#[cfg(feature = "full_crypto")]
 impl_crypto_type!(Pair, Public, Signature);
+#[cfg(not(feature = "full_crypto"))]
+impl_crypto_type!(Public, Signature);
 
 /// Schnorrkel VRF related types and operations.
 pub mod vrf {

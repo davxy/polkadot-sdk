@@ -52,7 +52,7 @@ blake2 = { version = "0.10.4", default-features = false, optional = true }
 libsecp256k1 = { version = "0.7", default-features = false, features = ["static-context"] }
 schnorrkel = { version = "0.11.4", features = ["preaudit_deprecated"], default-features = false }
 merlin = { version = "3.0", default-features = false }
-secp256k1 = { version = "0.28.0", default-features = false, features = ["alloc", "recovery"], optional = true }
+secp256k1 = { version = "0.28.0", default-features = false, features = ["alloc", "recovery"] }
 sp-crypto-hashing = { path = "../crypto/hashing", default-features = false }
 sp-runtime-interface = { path = "../runtime-interface", default-features = false }
 
@@ -94,6 +94,7 @@ std = [
 	"hash256-std-hasher/std",
 	"impl-serde/std",
 	"itertools",
+	"libsecp256k1/static-context",
 	"libsecp256k1/std",
 	"log/std",
 	"merlin/std",
@@ -144,7 +145,6 @@ serde = [
 full_crypto = [
 	"array-bytes",
 	"blake2",
-	"secp256k1",
 	"sp-runtime-interface/disable_target_static_assertions",
 ]
 

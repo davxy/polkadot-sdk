@@ -18,6 +18,7 @@
 //! ECDSA secp256k1 API.
 
 use codec::{Decode, Encode, MaxEncodedLen};
+use core::hash::Hash;
 use scale_info::TypeInfo;
 use sp_runtime_interface::pass_by::PassByInner;
 
@@ -29,15 +30,16 @@ use crate::crypto::{
 };
 #[cfg(feature = "full_crypto")]
 use crate::crypto::{DeriveError, DeriveJunction, Pair as TraitPair, SecretStringError};
-#[cfg(all(feature = "full_crypto", not(feature = "std")))]
+#[cfg(not(feature = "std"))]
 use secp256k1::Secp256k1;
 #[cfg(feature = "std")]
 use secp256k1::SECP256K1;
-#[cfg(feature = "full_crypto")]
 use secp256k1::{
 	ecdsa::{RecoverableSignature, RecoveryId},
-	Message, PublicKey, SecretKey,
+	Message,
 };
+#[cfg(feature = "full_crypto")]
+use secp256k1::{PublicKey, SecretKey};
 #[cfg(feature = "serde")]
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 #[cfg(all(not(feature = "std"), feature = "serde"))]
@@ -61,7 +63,6 @@ pub const SIGNATURE_SERIALIZED_SIZE: usize = 65;
 type Seed = [u8; 32];
 
 /// The ECDSA compressed public key.
-#[cfg_attr(feature = "full_crypto", derive(Hash))]
 #[derive(
 	Clone,
 	Copy,
@@ -74,6 +75,7 @@ type Seed = [u8; 32];
 	PartialEq,
 	PartialOrd,
 	Ord,
+	Hash,
 )]
 pub struct Public(pub [u8; PUBLIC_KEY_SERIALIZED_SIZE]);
 
@@ -272,13 +274,11 @@ impl Signature {
 	}
 
 	/// Recover the public key from this signature and a message.
-	#[cfg(feature = "full_crypto")]
-	pub fn recover<M: AsRef<[u8]>>(&self, message: M) -> Option<Public> {
+	pub fn recover(&self, message: impl AsRef<[u8]>) -> Option<Public> {
 		self.recover_prehashed(&sp_crypto_hashing::blake2_256(message.as_ref()))
 	}
 
 	/// Recover the public key from this signature and a pre-hashed message.
-	#[cfg(feature = "full_crypto")]
 	pub fn recover_prehashed(&self, message: &[u8; 32]) -> Option<Public> {
 		let rid = RecoveryId::from_i32(self.0[64] as i32).ok()?;
 		let sig = RecoverableSignature::from_compact(&self.0[..64], rid).ok()?;
@@ -436,7 +436,10 @@ impl Drop for Pair {
 	}
 }
 
+#[cfg(feature = "full_crypto")]
 impl_crypto_type!(Pair, Public, Signature);
+#[cfg(not(feature = "full_crypto"))]
+impl_crypto_type!(Public, Signature);
 
 #[cfg(test)]
 mod test {

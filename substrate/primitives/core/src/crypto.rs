@@ -17,7 +17,7 @@
 
 //! Cryptographic utilities.
 
-use crate::{ed25519, sr25519};
+// use crate::{ed25519, sr25519};
 #[cfg(feature = "std")]
 use bip39::{Language, Mnemonic};
 use codec::{Decode, Encode, MaxEncodedLen};
@@ -533,17 +533,17 @@ impl From<[u8; 32]> for AccountId32 {
 	}
 }
 
-impl From<sr25519::Public> for AccountId32 {
-	fn from(k: sr25519::Public) -> Self {
-		k.0.into()
-	}
-}
+// impl From<sr25519::Public> for AccountId32 {
+// 	fn from(k: sr25519::Public) -> Self {
+// 		k.0.into()
+// 	}
+// }
 
-impl From<ed25519::Public> for AccountId32 {
-	fn from(k: ed25519::Public) -> Self {
-		k.0.into()
-	}
-}
+// impl From<ed25519::Public> for AccountId32 {
+// 	fn from(k: ed25519::Public) -> Self {
+// 		k.0.into()
+// 	}
+// }
 
 #[cfg(feature = "std")]
 impl std::fmt::Display for AccountId32 {
@@ -1012,16 +1012,26 @@ where
 /// TODO
 pub trait Signature: CryptoType + ByteArray {}
 
-/// Type which has a particular kind of crypto associated with it.
+/// Trait grouping types required by any public key crypto scheme.
 pub trait CryptoType {
-	/// The pair key type of this crypto.
+	/// Secret key component.
+	#[cfg(feature = "full_crypto")]
 	type Pair: Pair + CryptoType<Public = Self::Public, Signature = Self::Signature>;
-	/// TODO
+	/// Public key component.
+	#[cfg(feature = "full_crypto")]
 	type Public: Public + CryptoType<Pair = Self::Pair, Signature = Self::Signature>;
-	/// TODO
-	type Signature: Signature + CryptoType<Public = Self::Public, Pair = Self::Pair>;
+	/// Public key component.
+	#[cfg(not(feature = "full_crypto"))]
+	type Public: Public + CryptoType<Signature = Self::Signature>;
+	/// Signature.
+	#[cfg(feature = "full_crypto")]
+	type Signature: Signature + CryptoType<Pair = Self::Pair, Public = Self::Public>;
+	/// Signature.
+	#[cfg(not(feature = "full_crypto"))]
+	type Signature: Signature + CryptoType<Public = Self::Public>;
 }
 
+#[cfg(feature = "full_crypto")]
 macro_rules! impl_crypto_type {
 	($secret:ident, $public:ident, $signature:ident) => {
 		impl $crate::crypto::CryptoType for $secret {
@@ -1036,6 +1046,19 @@ macro_rules! impl_crypto_type {
 		}
 		impl $crate::crypto::CryptoType for $signature {
 			type Pair = $secret;
+			type Public = $public;
+			type Signature = $signature;
+		}
+	};
+}
+#[cfg(not(feature = "full_crypto"))]
+macro_rules! impl_crypto_type {
+	($public:ident, $signature:ident) => {
+		impl $crate::crypto::CryptoType for $public {
+			type Public = $public;
+			type Signature = $signature;
+		}
+		impl $crate::crypto::CryptoType for $signature {
 			type Public = $public;
 			type Signature = $signature;
 		}

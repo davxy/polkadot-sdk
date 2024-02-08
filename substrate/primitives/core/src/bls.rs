@@ -37,9 +37,11 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 #[cfg(all(not(feature = "std"), feature = "serde"))]
 use sp_std::alloc::{format, string::String};
 
-use w3f_bls::{DoublePublicKey, DoubleSignature, EngineBLS, SerializableToBytes, TinyBLS381};
+use w3f_bls::{
+	DoublePublicKey, DoubleSignature, EngineBLS, Message, SerializableToBytes, TinyBLS381,
+};
 #[cfg(feature = "full_crypto")]
-use w3f_bls::{DoublePublicKeyScheme, Keypair, Message, SecretKey};
+use w3f_bls::{DoublePublicKeyScheme, Keypair, SecretKey};
 
 use sp_runtime_interface::pass_by::{self, PassBy, PassByInner};
 use sp_std::{convert::TryFrom, marker::PhantomData, ops::Deref};
@@ -172,9 +174,8 @@ impl<T> Ord for Public<T> {
 	}
 }
 
-#[cfg(feature = "full_crypto")]
-impl<T> sp_std::hash::Hash for Public<T> {
-	fn hash<H: sp_std::hash::Hasher>(&self, state: &mut H) {
+impl<T> core::hash::Hash for Public<T> {
+	fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
 		self.inner.hash(state)
 	}
 }

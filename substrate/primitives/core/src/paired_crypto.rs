@@ -66,7 +66,10 @@ pub mod ecdsa_bls377 {
 	/// (ECDSA,BLS12-377) signature pair.
 	pub type Signature = super::Signature<SIGNATURE_LEN>;
 
+	#[cfg(feature = "full_crypto")]
 	impl_crypto_type!(Pair, Public, Signature);
+	#[cfg(not(feature = "full_crypto"))]
+	impl_crypto_type!(Public, Signature);
 
 	#[cfg(feature = "full_crypto")]
 	impl Pair {
@@ -150,11 +153,10 @@ pub struct Public<L, R, const LEFT_PLUS_RIGHT_LEN: usize> {
 	_phantom: PhantomData<(L, R)>,
 }
 
-#[cfg(feature = "full_crypto")]
-impl<L, R, const LEFT_PLUS_RIGHT_LEN: usize> sp_std::hash::Hash
+impl<L, R, const LEFT_PLUS_RIGHT_LEN: usize> core::hash::Hash
 	for Public<L, R, LEFT_PLUS_RIGHT_LEN>
 {
-	fn hash<H: sp_std::hash::Hasher>(&self, state: &mut H) {
+	fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
 		self.inner.hash(state);
 	}
 }
@@ -339,9 +341,8 @@ impl<const LEFT_PLUS_RIGHT_LEN: usize> ByteArray for Signature<LEFT_PLUS_RIGHT_L
 	const LEN: usize = LEFT_PLUS_RIGHT_LEN;
 }
 
-#[cfg(feature = "full_crypto")]
-impl<const LEFT_PLUS_RIGHT_LEN: usize> sp_std::hash::Hash for Signature<LEFT_PLUS_RIGHT_LEN> {
-	fn hash<H: sp_std::hash::Hasher>(&self, state: &mut H) {
+impl<const LEFT_PLUS_RIGHT_LEN: usize> core::hash::Hash for Signature<LEFT_PLUS_RIGHT_LEN> {
+	fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
 		self.0.hash(state);
 	}
 }
