@@ -221,6 +221,20 @@ macro_rules! app_crypto_pair_functions_if_std {
 #[macro_export]
 macro_rules! app_crypto_public_full_crypto {
 	($public:ty, $key_type:expr, $crypto_type:expr) => {
+		$crate::wrap! {
+			/// A generic `AppPublic` wrapper type over $public crypto; this has no specific App.
+			#[derive(
+				Clone, Eq, Hash, PartialEq, PartialOrd, Ord,
+				$crate::codec::Encode,
+				$crate::codec::Decode,
+				$crate::RuntimeDebug,
+				$crate::codec::MaxEncodedLen,
+				$crate::scale_info::TypeInfo,
+			)]
+			#[codec(crate = $crate::codec)]
+			pub struct Public($public);
+		}
+
 		impl $crate::CryptoType for Public {
 			type Pair = Pair;
 			type Public = Public;
@@ -245,6 +259,19 @@ macro_rules! app_crypto_public_full_crypto {
 #[macro_export]
 macro_rules! app_crypto_public_not_full_crypto {
 	($public:ty, $key_type:expr, $crypto_type:expr) => {
+		$crate::wrap! {
+			/// A generic `AppPublic` wrapper type over $public crypto; this has no specific App.
+			#[derive(
+				Clone, Eq, Hash, PartialEq, PartialOrd, Ord,
+				$crate::codec::Encode,
+				$crate::codec::Decode,
+				$crate::RuntimeDebug,
+				$crate::codec::MaxEncodedLen,
+				$crate::scale_info::TypeInfo,
+			)]
+			pub struct Public($public);
+		}
+
 		impl $crate::CryptoType for Public {
 			type Public = Public;
 			type Signature = Signature;
@@ -266,20 +293,6 @@ macro_rules! app_crypto_public_not_full_crypto {
 #[macro_export]
 macro_rules! app_crypto_public_common {
 	($public:ty, $sig:ty, $key_type:expr, $crypto_type:expr) => {
-		$crate::wrap! {
-			/// A generic `AppPublic` wrapper type over $public crypto; this has no specific App.
-			#[derive(
-				Clone, Eq, Hash, PartialEq, PartialOrd, Ord,
-				$crate::codec::Encode,
-				$crate::codec::Decode,
-				$crate::RuntimeDebug,
-				$crate::codec::MaxEncodedLen,
-				$crate::scale_info::TypeInfo,
-			)]
-			#[codec(crate = $crate::codec)]
-			pub struct Public($public);
-		}
-
 		$crate::app_crypto_public_common_if_serde!();
 
 		impl $crate::Public for Public {

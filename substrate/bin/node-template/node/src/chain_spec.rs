@@ -12,7 +12,7 @@ use sp_runtime::traits::{IdentifyAccount, Verify};
 pub type ChainSpec = sc_service::GenericChainSpec<RuntimeGenesisConfig>;
 
 /// Generate a crypto pair from seed.
-pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Public {
+pub fn get_from_seed<TPublic: Public>(seed: &str) -> TPublic {
 	TPublic::Pair::from_string(&format!("//{}", seed), None)
 		.expect("static values are valid; qed")
 		.public()
@@ -23,7 +23,7 @@ type AccountPublic = <Signature as Verify>::Signer;
 /// Generate an account ID from seed.
 pub fn get_account_id_from_seed<TPublic: Public>(seed: &str) -> AccountId
 where
-	AccountPublic: From<<TPublic::Pair as Pair>::Public>,
+	AccountPublic: From<TPublic>,
 {
 	AccountPublic::from(get_from_seed::<TPublic>(seed)).into_account()
 }

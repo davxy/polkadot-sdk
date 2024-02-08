@@ -30,7 +30,7 @@ use sp_application_crypto::{AppCrypto, AppPublic};
 use sp_blockchain::Result as CResult;
 use sp_consensus::Error as ConsensusError;
 use sp_consensus_slots::Slot;
-use sp_core::crypto::{ByteArray, Pair};
+use sp_core::crypto::{ByteArray, Pair, Public};
 use sp_keystore::KeystorePtr;
 use sp_runtime::{
 	traits::{Block as BlockT, Header, NumberFor, Zero},
@@ -312,7 +312,7 @@ where
 
 		let pre_hash = header.hash();
 
-		if P::verify(&sig, pre_hash.as_ref(), expected_author) {
+		if expected_author.verify(&sig, pre_hash.as_ref()) {
 			Ok((header, slot, seal))
 		} else {
 			Err(SealVerificationError::BadSignature)
