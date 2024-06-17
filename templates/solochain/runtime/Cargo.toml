@@ -28,6 +28,7 @@ frame-try-runtime = { path = "../../../substrate/frame/try-runtime", default-fea
 frame-executive = { path = "../../../substrate/frame/executive", default-features = false }
 
 # frame pallets
+pallet-sassafras = { path = "../../../substrate/frame/sassafras", default-features = false, features = ["construct-dummy-ring-context"] }
 pallet-aura = { path = "../../../substrate/frame/aura", default-features = false }
 pallet-balances = { path = "../../../substrate/frame/balances", default-features = false }
 pallet-grandpa = { path = "../../../substrate/frame/grandpa", default-features = false }
@@ -90,6 +91,7 @@ std = [
 	"frame-benchmarking?/std",
 	"frame-try-runtime?/std",
 
+	"pallet-sassafras/std",
 	"pallet-aura/std",
 	"pallet-balances/std",
 	"pallet-grandpa/std",
@@ -128,6 +130,7 @@ runtime-benchmarks = [
 	"pallet-template/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
+	"pallet-sassafras/runtime-benchmarks",
 ]
 
 try-runtime = [
@@ -135,6 +138,7 @@ try-runtime = [
 	"frame-support/try-runtime",
 	"frame-system/try-runtime",
 	"frame-try-runtime/try-runtime",
+	"pallet-sassafras/try-runtime",
 	"pallet-aura/try-runtime",
 	"pallet-balances/try-runtime",
 	"pallet-grandpa/try-runtime",

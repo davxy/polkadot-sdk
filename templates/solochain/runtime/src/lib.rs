@@ -178,6 +178,23 @@ impl frame_system::Config for Runtime {
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
+// impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
+// where
+// 	RuntimeCall: From<C>,
+// {
+// 	type Extrinsic = UncheckedExtrinsic;
+// 	type OverarchingCall = RuntimeCall;
+// }
+
+impl pallet_sassafras::Config for Runtime {
+	type EpochLength = ConstU32<200>;
+	type MaxAuthorities = ConstU32<100>;
+	type RedundancyFactor = ConstU8<2>;
+	type AttemptsNumber = ConstU8<32>;
+	type EpochChangeTrigger = pallet_sassafras::EpochChangeInternalTrigger;
+	type WeightInfo = pallet_sassafras::weights::SubstrateWeight<Runtime>;
+}
+
 impl pallet_aura::Config for Runtime {
 	type AuthorityId = AuraId;
 	type DisabledValidators = ();
@@ -293,6 +310,9 @@ mod runtime {
 	// Include the custom logic from the pallet-template in the runtime.
 	#[runtime::pallet_index(7)]
 	pub type TemplateModule = pallet_template;
+
+	#[runtime::pallet_index(8)]
+	pub type Sassafras = pallet_sassafras;
 }
 
 /// The address format for describing accounts.
@@ -343,6 +363,7 @@ mod benches {
 		[pallet_timestamp, Timestamp]
 		[pallet_sudo, Sudo]
 		[pallet_template, TemplateModule]
+		[pallet_sassafras, Sassafras]
 	);
 }
 

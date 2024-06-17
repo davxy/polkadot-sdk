@@ -49,6 +49,9 @@ sp-api = { path = "../../../substrate/primitives/api" }
 sp-blockchain = { path = "../../../substrate/primitives/blockchain" }
 sp-block-builder = { path = "../../../substrate/primitives/block-builder" }
 
+sp-consensus-sassafras = { path = "../../../substrate/primitives/consensus/sassafras" }
+sp-crypto-ec-utils = { path = "../../../substrate/primitives/crypto/ec-utils", features = ["bls12-381","ed-on-bls12-381-bandersnatch"] }
+
 # frame and pallets
 frame-system = { path = "../../../substrate/frame/system" }
 pallet-transaction-payment = { path = "../../../substrate/frame/transaction-payment", default-features = false }
