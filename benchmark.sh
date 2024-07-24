@@ -1,6 +1,10 @@
 #!/bin/bash
-
-# https://github.com/paritytech/polkadot-sdk/pull/1577/commits/4fd7f7aab71bc0f8d7a24a45f47ff4a23dabdb05#diff-833a94ebc229f189e17fdb680257706f88638b55cbfd3123a75411733e3a2645
+#
+# Build with:
+#
+# ```bash
+# $ cargo build --release -p solochain-template-node --features runtime-benchmarks
+# ```
 
 binary="./target/release/solochain-template-node"
 
