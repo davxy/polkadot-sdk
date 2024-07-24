@@ -28,7 +28,7 @@ frame-try-runtime = { optional = true, workspace = true }
 frame-executive = { workspace = true }
 
 # frame pallets
-pallet-sassafras = { workspace = true, features = ["construct-dummy-ring-context"] }
+pallet-sassafras = { path = "../../../substrate/frame/sassafras", default-features = false, features = ["construct-dummy-ring-context"] }
 pallet-aura = { workspace = true }
 pallet-balances = { workspace = true }
 pallet-grandpa = { workspace = true }

@@ -13,7 +13,7 @@ use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
 	traits::{BlakeTwo256, Block as BlockT, IdentifyAccount, NumberFor, One, Verify},
 	transaction_validity::{TransactionSource, TransactionValidity},
-	ApplyExtrinsicResult, MultiSignature,
+	ApplyExtrinsicResult, MultiSignature, Percent,
 };
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
@@ -187,11 +187,17 @@ impl frame_system::Config for Runtime {
 // 	type OverarchingCall = RuntimeCall;
 // }
 
+parameter_types! {
+	pub const LotteryPercent: Percent = Percent::from_percent(85);
+}
+
 impl pallet_sassafras::Config for Runtime {
-	type EpochLength = ConstU32<200>;
+	type EpochDuration = ConstU32<200>;
 	type MaxAuthorities = ConstU32<100>;
 	type RedundancyFactor = ConstU8<2>;
 	type AttemptsNumber = ConstU8<32>;
+	type TicketsChunkLength = ConstU32<16>;
+	type LotteryDurationPercent = LotteryPercent;
 	type EpochChangeTrigger = pallet_sassafras::EpochChangeInternalTrigger;
 	type WeightInfo = pallet_sassafras::weights::SubstrateWeight<Runtime>;
 }

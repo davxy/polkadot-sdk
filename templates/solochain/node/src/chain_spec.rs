@@ -11,7 +11,6 @@ use sp_runtime::traits::{IdentifyAccount, Verify};
 
 /// Specialized `ChainSpec`. This is a specialization of the general Substrate ChainSpec type.
 pub type ChainSpec = sc_service::GenericChainSpec<
-	RuntimeGenesisConfig,
 	Option<()>,
 	(
 		sp_crypto_ec_utils::bls12_381::host_calls::HostFunctions,

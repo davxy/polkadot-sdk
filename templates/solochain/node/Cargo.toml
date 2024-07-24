@@ -50,7 +50,7 @@ sp-blockchain = { workspace = true, default-features = true }
 sp-block-builder = { workspace = true, default-features = true }
 
 sp-consensus-sassafras = { path = "../../../substrate/primitives/consensus/sassafras" }
-sp-crypto-ec-utils = { path = "../../../substrate/primitives/crypto/ec-utils", features = ["bls12-381","ed-on-bls12-381-bandersnatch"] }
+sp-crypto-ec-utils = { workspace = true, default-features = true, features = ["bls12-381","ed-on-bls12-381-bandersnatch"] }
 
 # frame and pallets
 frame-system = { workspace = true, default-features = true }
