@@ -179,14 +179,6 @@ impl frame_system::Config for Runtime {
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
-// impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
-// where
-// 	RuntimeCall: From<C>,
-// {
-// 	type Extrinsic = UncheckedExtrinsic;
-// 	type OverarchingCall = RuntimeCall;
-// }
-
 parameter_types! {
 	pub const LotteryPercent: Percent = Percent::from_percent(85);
 }
