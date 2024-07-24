@@ -44,27 +44,12 @@ macro_rules! prefix_eq {
 	}};
 }
 
-// Fisher-Yates shuffle.
-//
-// We don't want to implement something secure here.
-// Just a trivial pseudo-random shuffle for the tests.
-fn shuffle<T>(vector: &mut Vec<T>, random_seed: u64) {
-	let mut r = random_seed as usize;
-	for i in (1..vector.len()).rev() {
-		let j = r % (i + 1);
-		vector.swap(i, j);
-		r = (r.wrapping_mul(6364793005) + 1) as usize;
-	}
-}
-
-fn dummy_tickets(count: u8) -> Vec<TicketBody> {
-	make_ticket_bodies(count, None)
-}
-
 #[test]
 fn assumptions_check() {
-	let mut tickets = dummy_tickets(100);
-	shuffle(&mut tickets, 123);
+	let mut tickets = make_ticket_bodies(100, None, false);
+
+	// Check that the returned tickets are not sorted to start with.
+	assert!(tickets.windows(2).any(|w| w[0] > w[1]));
 
 	new_test_ext(3).execute_with(|| {
 		assert_eq!(Sassafras::authorities().len(), 3);
@@ -86,8 +71,7 @@ fn assumptions_check() {
 
 #[test]
 fn deposit_tickets_works() {
-	let mut tickets = dummy_tickets(15);
-	shuffle(&mut tickets, 123);
+	let mut tickets = make_ticket_bodies(15, None, false);
 
 	new_test_ext(1).execute_with(|| {
 		// Try to append an unsorted chunk
@@ -351,41 +335,54 @@ fn produce_epoch_change_digest() {
 }
 
 // Tests if the sorted tickets are assigned to each slot outside-in.
-#[test]
-fn slot_ticket_id_outside_in_fetch() {
+fn slot_ticket_id_outside_in_fetch(jit_accumulator_drain: bool) {
 	let genesis_slot = Slot::from(GENESIS_SLOT);
 	let curr_count = 8;
 	let next_count = 6;
-	let tickets = dummy_tickets(curr_count + next_count);
+	let tickets = make_ticket_bodies(curr_count + next_count, None, false);
 
-	// Current epoch tickets
-	let curr_tickets = tickets[..curr_count as usize].to_vec();
-	let next_tickets = tickets[curr_count as usize..].to_vec();
+	// Current epoch tickets (incrementally sorted as expected by the protocol)
+	let mut curr_tickets = tickets[..curr_count as usize].to_vec();
+	curr_tickets.sort_unstable();
+	// Next epoch tickets (incrementally sorted as expected by the protocol)
+	let mut next_tickets = tickets[curr_count as usize..].to_vec();
+	next_tickets.sort_unstable();
 
 	new_test_ext(0).execute_with(|| {
+		// Store current epoch tickets in place.
 		curr_tickets
 			.iter()
 			.enumerate()
 			.for_each(|(i, t)| Tickets::<Test>::insert((0, i as u32), t));
 
-		next_tickets
-			.iter()
-			.enumerate()
-			.for_each(|(i, t)| Tickets::<Test>::insert((1, i as u32), t));
+		if jit_accumulator_drain {
+			// Store next epoch tickets in the accumulator (to test the JIT sorting logic as well)
+			next_tickets
+				.iter()
+				.for_each(|t| TicketsAccumulator::<Test>::insert(TicketKey::from(t.id), t));
+			TicketsCount::<Test>::set([curr_count as u32, 0]);
+		} else {
+			// Directly store in the tickets buffer
+			next_tickets
+				.iter()
+				.enumerate()
+				.for_each(|(i, t)| Tickets::<Test>::insert((1, i as u32), t));
+			TicketsCount::<Test>::set([curr_count as u32, next_count as u32]);
+		}
 
-		TicketsCount::<Test>::set([curr_count as u32, next_count as u32]);
 		CurrentSlot::<Test>::set(genesis_slot);
 
-		// Before importing the first block the pallet always return `None`
-		// This is a kind of special hardcoded case that should never happen in practice
-		// as the first thing the pallet does is to initialize the genesis slot.
+		// Before importing the first block (on frame System pallet) `slot_ticket` always
+		// returns `None`. This is a kind of special hardcoded case that should never happen
+		// in practice as the first thing the pallet does is to initialize the genesis slot.
 
 		assert_eq!(Sassafras::slot_ticket(0.into()), None);
 		assert_eq!(Sassafras::slot_ticket(genesis_slot + 0), None);
 		assert_eq!(Sassafras::slot_ticket(genesis_slot + 1), None);
 		assert_eq!(Sassafras::slot_ticket(genesis_slot + 100), None);
 
-		// Reset block number..
+		// Manually set block number to simulate that frame system initialize has been
+		// called for the first block.
 		frame_system::Pallet::<Test>::set_block_number(One::one());
 
 		// Try to fetch a ticket for a slot before current epoch.
@@ -405,6 +402,10 @@ fn slot_ticket_id_outside_in_fetch() {
 
 		// Next epoch tickets.
 		assert_eq!(Sassafras::slot_ticket(genesis_slot + 10).unwrap(), next_tickets[0]);
+		if jit_accumulator_drain {
+			// After first fetch tickets are moved to the buffer
+			assert_eq!(TicketsCount::<Test>::get()[1], 6);
+		}
 		assert_eq!(Sassafras::slot_ticket(genesis_slot + 11).unwrap(), next_tickets[5]);
 		assert_eq!(Sassafras::slot_ticket(genesis_slot + 12).unwrap(), next_tickets[1]);
 		assert_eq!(Sassafras::slot_ticket(genesis_slot + 13).unwrap(), next_tickets[4]);
@@ -419,6 +420,16 @@ fn slot_ticket_id_outside_in_fetch() {
 		assert!(Sassafras::slot_ticket(genesis_slot + 20).is_none());
 		assert!(Sassafras::slot_ticket(genesis_slot + 42).is_none());
 	});
+}
+
+#[test]
+fn slot_ticket_id_outside_in_fetch_jit_accumulator_drain() {
+	slot_ticket_id_outside_in_fetch(true);
+}
+
+#[test]
+fn slot_ticket_id_outside_in_fetch_no_jit_accumulator_drain() {
+	slot_ticket_id_outside_in_fetch(false);
 }
 
 #[test]
@@ -472,7 +483,7 @@ fn tickets_accumulator_works() {
 	let start_slot = (GENESIS_SLOT + 1).into();
 	let e1_count = 6;
 	let e2_count = 10;
-	let tickets = dummy_tickets(e1_count + e2_count);
+	let tickets = make_ticket_bodies(e1_count + e2_count, None, false);
 	let e1_tickets = tickets[..e1_count as usize].to_vec();
 	let e2_tickets = tickets[e1_count as usize..].to_vec();
 
@@ -564,7 +575,7 @@ fn tickets_accumulator_works() {
 
 #[test]
 fn incremental_accumulator_drain() {
-	let tickets = dummy_tickets(10);
+	let tickets = make_ticket_bodies(10, None, false);
 
 	new_test_ext(0).execute_with(|| {
 		tickets
@@ -609,7 +620,7 @@ fn incremental_accumulator_drain() {
 }
 
 #[test]
-fn submit_tickets_with_ring_proof_check_works() {
+fn submit_tickets_works() {
 	use sp_core::Pair as _;
 	let _ = env_logger::try_init();
 	let start_block = 1;
@@ -620,6 +631,8 @@ fn submit_tickets_with_ring_proof_check_works() {
 		Vec<AuthorityId>,
 		Vec<TicketEnvelope>,
 	) = data_read(TICKETS_FILE);
+
+	let config = Sassafras::protocol_config();
 
 	// Also checks that duplicates are discarded
 
@@ -646,11 +659,18 @@ fn submit_tickets_with_ring_proof_check_works() {
 			.collect();
 		assert_eq!(chunks.len(), 5);
 
-		// Submit an invalid candidate
+		// Try to submit a candidate with an invalid signature.
 		let mut chunk = chunks[2].clone();
-		chunk[0].attempt += 1;
+		chunk[0].signature.signature[0] ^= 1;
 		let e = Sassafras::submit_tickets(RuntimeOrigin::none(), chunk).unwrap_err();
 		assert_eq!(e, DispatchError::from(Error::<Test>::TicketBadProof));
+		assert_eq!(TicketsAccumulator::<Test>::count(), 0);
+
+		// Try to submit with invalid attempt number.
+		let mut chunk = chunks[2].clone();
+		chunk[0].attempt = u8::MAX;
+		let e = Sassafras::submit_tickets(RuntimeOrigin::none(), chunk).unwrap_err();
+		assert_eq!(e, DispatchError::from(Error::<Test>::TicketBadAttempt));
 		assert_eq!(TicketsAccumulator::<Test>::count(), 0);
 
 		// Start submitting from the mid valued chunks.
@@ -661,7 +681,7 @@ fn submit_tickets_with_ring_proof_check_works() {
 		Sassafras::submit_tickets(RuntimeOrigin::none(), chunks[3].clone()).unwrap();
 		assert_eq!(TicketsAccumulator::<Test>::count(), 8);
 
-		// Try to submit duplicates
+		// Try to submit a ticket duplicate
 		let e = Sassafras::submit_tickets(RuntimeOrigin::none(), chunks[2].clone()).unwrap_err();
 		assert_eq!(e, DispatchError::from(Error::<Test>::TicketDuplicate));
 		assert_eq!(TicketsAccumulator::<Test>::count(), 8);
@@ -672,12 +692,17 @@ fn submit_tickets_with_ring_proof_check_works() {
 
 		// Try to submit a chunk with bigger tickets. This is discarded
 		let e = Sassafras::submit_tickets(RuntimeOrigin::none(), chunks[4].clone()).unwrap_err();
-		assert_eq!(e, DispatchError::from(Error::<Test>::TicketInvalid));
+		assert_eq!(e, DispatchError::from(Error::<Test>::TicketDropped));
 		assert_eq!(TicketsAccumulator::<Test>::count(), 10);
 
 		// Submit the smaller candidates chunks. This is accepted (4 old tickets removed).
 		Sassafras::submit_tickets(RuntimeOrigin::none(), chunks[0].clone()).unwrap();
 		assert_eq!(TicketsAccumulator::<Test>::count(), 10);
+
+		// Try to submit a chunk after when the contest is over.
+		progress_to_block(start_block + (config.epoch_duration as u64 - 2), &pairs[0]).unwrap();
+		let e = Sassafras::submit_tickets(RuntimeOrigin::none(), chunks[0].clone()).unwrap_err();
+		assert_eq!(e, DispatchError::from(Error::<Test>::TicketUnexpected));
 	})
 }
 
