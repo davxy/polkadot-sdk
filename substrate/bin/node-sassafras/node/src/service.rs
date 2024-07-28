@@ -263,7 +263,6 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
 			justification_sync_link: sync_service.clone(),
 			force_authoring,
 			create_inherent_data_providers: create_inherent_data_providers(),
-			offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool.clone()),
 		};
 
 		let sassafras = sc_consensus_sassafras::start_sassafras(sassafras_params)?;

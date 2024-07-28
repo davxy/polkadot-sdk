@@ -22,7 +22,7 @@
 
 use std::{collections::HashSet, sync::Arc};
 
-use scale_codec::{Decode, Encode};
+use codec::{Decode, Encode};
 
 use sc_client_api::backend::AuxStore;
 use sc_consensus_epochs::{EpochChangesFor, SharedEpochChanges};

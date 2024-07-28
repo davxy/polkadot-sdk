@@ -20,19 +20,24 @@
 
 use super::*;
 
-use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_consensus_sassafras::{
 	digests::SlotClaim, ticket_id_threshold, vrf::RingContext, AuthorityId, Slot, TicketBody,
-	TicketClaim, TicketEnvelope, TicketId,
+	TicketEnvelope, TicketId,
 };
-use sp_core::{ed25519::Pair as EphemeralPair, hashing::blake2_64, ByteArray};
+use sp_core::hashing::blake2_64;
 use std::pin::Pin;
 
 /// Get secondary authority index for the given epoch and slot.
-pub(crate) fn secondary_authority_index(slot: Slot, epoch: &Epoch) -> AuthorityIndex {
+pub(crate) fn secondary_authority_index(slot: Slot, epoch: &Epoch) -> usize {
 	// TODO @davxy twox -> blake2
 	let hash = u64::from_le_bytes((epoch.randomness, slot).using_encoded(blake2_64));
-	(hash % epoch.authorities.len() as u64) as AuthorityIndex
+	(hash % epoch.authorities.len() as u64) as usize
+}
+
+pub(crate) struct SlotClaimExt {
+	claim: SlotClaim,
+	authority: AuthorityId,
+	is_primary: bool,
 }
 
 /// Try to claim an epoch slot.
@@ -42,61 +47,59 @@ pub(crate) fn claim_slot(
 	epoch: &mut Epoch,
 	maybe_ticket: Option<(TicketId, TicketBody)>,
 	keystore: &KeystorePtr,
-) -> Option<(SlotClaim, AuthorityId)> {
+) -> Option<SlotClaimExt> {
 	if epoch.authorities.is_empty() {
 		return None
 	}
 
-	let mut vrf_sign_data = vrf::slot_claim_sign_data(&epoch.randomness, slot, epoch.index);
-
-	let (authority_idx, ticket_claim) = match maybe_ticket {
+	let (authority_idx, entropy, is_primary) = match maybe_ticket {
 		Some((ticket_id, ticket_body)) => {
-			debug!(target: LOG_TARGET, "[TRY PRIMARY] slot: {}, tkt: {:032x}", slot, ticket_id);
+			debug!(target: LOG_TARGET, "[TRY PRIMARY] slot: {}, tkt: {:?}", slot, ticket_id);
 
-			// TODO @davxy
-			// If we lose the secret cache then to know if we are the ticket owner then looks
-			// like we need to regenerate the ticket-id using all our keys and check if the
-			// output matches with the onchain one.
-			let (authority_idx, ticket_secret) = epoch.tickets_aux.remove(&ticket_id)?;
-			debug!(
-				target: LOG_TARGET,
-				"  got ticket: authority: {}, attempt: {}",
-				authority_idx,
-				ticket_body.attempt_idx
-			);
+			let ticket_id_input =
+				sp_consensus_sassafras::vrf::ticket_id_input(epoch.randomness, ticket_body.attempt);
 
-			vrf_sign_data.push_transcript_data(&ticket_body.encode());
-
-			let reveal_vrf_input =
-				vrf::revealed_key_input(&epoch.randomness, ticket_body.attempt_idx, epoch.index);
-			vrf_sign_data
-				.push_vrf_input(reveal_vrf_input)
-				.expect("Sign data has enough space; qed");
-
-			// Sign some data using the erased key to enforce our ownership
-			let data = vrf_sign_data.challenge::<32>();
-			let erased_pair = EphemeralPair::from_seed(&ticket_secret.seed);
-			let erased_signature = erased_pair.sign(&data);
-
-			let claim = TicketClaim { erased_signature };
-			(authority_idx, Some(claim))
+			let authority_idx =
+				epoch.authorities.iter().enumerate().find_map(|(i, authority_id)| {
+					let ticket_id_output = keystore
+						.bandersnatch_vrf_pre_output(
+							AuthorityId::ID,
+							authority_id.as_ref(),
+							&ticket_id_input,
+						)
+						.ok()??;
+					if ticket_id == vrf::make_ticket_id(&ticket_id_input, &ticket_id_output) {
+						Some(i)
+					} else {
+						None
+					}
+				})?;
+			(authority_idx, ticket_id.0, true)
 		},
 		None => {
 			debug!(target: LOG_TARGET, "[TRY SECONDARY] slot: {})", slot);
-			(secondary_authority_index(slot, epoch), None)
+			let authority_idx = secondary_authority_index(slot, epoch);
+			// TODO:
+			let entropy = [0; 32];
+			(authority_idx, entropy, false)
 		},
 	};
 
-	let authority_id = epoch.authorities.get(authority_idx as usize)?;
+	let authority_id = epoch.authorities.get(authority_idx)?;
 
+	let vrf_sign_data = vrf::block_randomness_sign_data(entropy);
 	let vrf_signature = keystore
 		.bandersnatch_vrf_sign(AuthorityId::ID, authority_id.as_ref(), &vrf_sign_data)
 		.ok()
 		.flatten()?;
 
-	let claim = SlotClaim { authority_idx, slot, vrf_signature, ticket_claim };
+	let claim_ext = SlotClaimExt {
+		claim: SlotClaim { authority_idx: authority_idx as AuthorityIndex, slot, vrf_signature },
+		authority: authority_id.clone(),
+		is_primary,
+	};
 
-	Some((claim, authority_id.clone()))
+	Some(claim_ext)
 }
 
 /// Generate the tickets for the given epoch.
@@ -111,22 +114,27 @@ fn generate_epoch_tickets(
 	let mut tickets = Vec::new();
 
 	let threshold = ticket_id_threshold(
-		epoch.config.redundancy_factor,
-		epoch.length,
-		epoch.config.attempts_number,
+		epoch.config.epoch_duration,
 		epoch.authorities.len() as u32,
+		epoch.config.attempts_number,
+		epoch.config.redundancy_factor,
 	);
-	debug!(target: LOG_TARGET, "Generating tickets for epoch {} @ slot {}", epoch.index, epoch.start);
-	trace!(target: LOG_TARGET, "  threshold: {:032x}", threshold);
+	debug!(
+		target: LOG_TARGET,
+		"Generating tickets for epoch {} @ slot {} (threshold: {:?})",
+		*epoch.start / epoch.config.epoch_duration as u64,
+		epoch.start,
+		threshold
+	);
 
 	// We need a list of raw unwrapped keys
 	let pks: Vec<_> = epoch.authorities.iter().map(|a| *a.as_ref()).collect();
 
-	let tickets_aux = &mut epoch.tickets_aux;
 	let epoch = &epoch.inner;
 
 	for (authority_idx, authority_id) in epoch.authorities.iter().enumerate() {
-		if !keystore.has_keys(&[(authority_id.to_raw_vec(), AuthorityId::ID)]) {
+		let raw_key = authority_id.clone().into_inner().to_vec();
+		if !keystore.has_keys(&[(raw_key, AuthorityId::ID)]) {
 			continue
 		}
 
@@ -134,35 +142,24 @@ fn generate_epoch_tickets(
 		let prover = ring_ctx.prover(&pks, authority_idx).unwrap();
 		trace!(target: LOG_TARGET, "  ...done");
 
-		let make_ticket = |attempt_idx| {
+		let make_ticket = |attempt| -> Option<(TicketId, TicketEnvelope)> {
 			// Ticket id and threshold check.
-			let ticket_id_input = vrf::ticket_id_input(&epoch.randomness, attempt_idx, epoch.index);
+			let ticket_id_input = vrf::ticket_id_input(epoch.randomness, attempt);
 			let ticket_id_output = keystore
-				.bandersnatch_vrf_output(AuthorityId::ID, authority_id.as_ref(), &ticket_id_input)
+				.bandersnatch_vrf_pre_output(
+					AuthorityId::ID,
+					authority_id.as_ref(),
+					&ticket_id_input,
+				)
 				.ok()??;
 			let ticket_id = vrf::make_ticket_id(&ticket_id_input, &ticket_id_output);
 			if ticket_id >= threshold {
 				return None
 			}
 
-			// Erased key.
-			let (erased_pair, erased_seed) = EphemeralPair::generate();
-			let erased_public = erased_pair.public();
+			let sign_data = vrf::ticket_id_sign_data(ticket_id_input, &[]);
 
-			// Revealed key.
-			let revealed_input =
-				vrf::revealed_key_input(&epoch.randomness, attempt_idx, epoch.index);
-			let revealed_output = keystore
-				.bandersnatch_vrf_output(AuthorityId::ID, authority_id.as_ref(), &revealed_input)
-				.ok()??;
-			let revealed_seed = vrf::make_revealed_key_seed(&revealed_input, &revealed_output);
-			let revealed_public = EphemeralPair::from_seed(&revealed_seed).public();
-
-			let body = TicketBody { attempt_idx, erased_public, revealed_public };
-
-			let sign_data = vrf::ticket_body_sign_data(&body, ticket_id_input);
-
-			trace!(target: LOG_TARGET, "Forging ring proof for {:032x} (attempt: {})", ticket_id, attempt_idx);
+			trace!(target: LOG_TARGET, "Forging ring proof for {:?} (attempt: {})", ticket_id, attempt);
 			let signature = keystore
 				.bandersnatch_ring_vrf_sign(
 					AuthorityId::ID,
@@ -173,17 +170,15 @@ fn generate_epoch_tickets(
 				.ok()??;
 			trace!(target: LOG_TARGET, "  ...done");
 
-			debug_assert_eq!(ticket_id_output, signature.outputs[0]);
+			debug_assert_eq!(ticket_id_output, signature.pre_outputs[0]);
 
-			let ticket_envelope = TicketEnvelope { body, signature };
-			let ticket_secret = TicketSecret { attempt_idx, seed: erased_seed };
-			Some((ticket_id, ticket_envelope, ticket_secret))
+			let ticket_envelope = TicketEnvelope { attempt, extra: Default::default(), signature };
+			Some((ticket_id, ticket_envelope))
 		};
 
 		for attempt in 0..epoch.config.attempts_number {
-			if let Some((ticket_id, ticket_envelope, ticket_secret)) = make_ticket(attempt) {
+			if let Some((ticket_id, ticket_envelope)) = make_ticket(attempt) {
 				tickets.push(ticket_envelope);
-				tickets_aux.insert(ticket_id, (authority_idx as u32, ticket_secret));
 			}
 		}
 	}
@@ -218,7 +213,7 @@ where
 	L: sc_consensus::JustificationSyncLink<B>,
 	ER: std::error::Error + Send + 'static,
 {
-	type Claim = (SlotClaim, AuthorityId);
+	type Claim = SlotClaimExt;
 	type SyncOracle = SO;
 	type JustificationSyncLink = L;
 	type CreateProposer =
@@ -296,8 +291,8 @@ where
 		});
 	}
 
-	fn pre_digest_data(&self, _slot: Slot, claim: &Self::Claim) -> Vec<DigestItem> {
-		vec![DigestItem::from(&claim.0)]
+	fn pre_digest_data(&self, _slot: Slot, claim_ext: &Self::Claim) -> Vec<DigestItem> {
+		vec![DigestItem::from(&claim_ext.claim)]
 	}
 
 	async fn block_import_params(
@@ -306,22 +301,24 @@ where
 		header_hash: &B::Hash,
 		body: Vec<B::Extrinsic>,
 		storage_changes: StorageChanges<B>,
-		(_, public): Self::Claim,
+		claim_ext: Self::Claim,
 		epoch_descriptor: Self::AuxData,
 	) -> Result<BlockImportParams<B>, ConsensusError> {
 		let signature = self
 			.keystore
 			.bandersnatch_sign(
 				<AuthorityId as AppCrypto>::ID,
-				public.as_ref(),
+				claim_ext.authority.as_ref(),
 				header_hash.as_ref(),
 			)
-			.map_err(|e| ConsensusError::CannotSign(format!("{}. Key {:?}", e, public)))?
+			.map_err(|e| {
+				ConsensusError::CannotSign(format!("{}. Key: {:?}", e, claim_ext.authority))
+			})?
 			.map(|sig| AuthoritySignature::from(sig))
 			.ok_or_else(|| {
 				ConsensusError::CannotSign(format!(
-					"Could not find key in keystore. Key {:?}",
-					public
+					"Could not find keystore entry for key {:?}",
+					claim_ext.authority
 				))
 			})?;
 
@@ -330,8 +327,10 @@ where
 		block.body = Some(body);
 		block.state_action =
 			StateAction::ApplyChanges(sc_consensus::StorageChanges::Changes(storage_changes));
-		block
-			.insert_intermediate(INTERMEDIATE_KEY, SassafrasIntermediate::<B> { epoch_descriptor });
+		block.insert_intermediate(
+			INTERMEDIATE_KEY,
+			SassafrasIntermediate::<B> { epoch_descriptor, is_primary: claim_ext.is_primary },
+		);
 
 		Ok(block)
 	}
@@ -397,7 +396,6 @@ async fn start_tickets_worker<B, C, SC>(
 	keystore: KeystorePtr,
 	epoch_changes: SharedEpochChanges<B, Epoch>,
 	select_chain: SC,
-	offchain_tx_pool_factory: OffchainTransactionPoolFactory<B>,
 ) where
 	B: BlockT,
 	C: BlockchainEvents<B> + ProvideRuntimeApi<B>,
@@ -406,12 +404,8 @@ async fn start_tickets_worker<B, C, SC>(
 {
 	let mut notifications = client.import_notification_stream();
 
-	// TODO @davxy: if be lot smarter to wait on `finality_notification_stream`.
-	// In that way we prevent producting tickets on potentially multiple forks.
-	// Furthermore, as these notifications are not 100% reliable may be a good
-	// idea to detect epoch changes withouth checking for the next epoch digest.
-	// As a fallback may be sufficient to play with known epoch length and slot
-	// number in the `SlotClaim` digest.
+	// TODO @davxy: be smarter to prevent tickets on potentially multiple forks.
+	// For the moment this is good enough for the prototype
 
 	while let Some(notification) = notifications.next().await {
 		let epoch_desc = match find_next_epoch_digest::<B>(&notification.header) {
@@ -470,30 +464,10 @@ async fn start_tickets_worker<B, C, SC>(
 			continue
 		}
 
-		// Register the offchain tx pool to be able to use it from the runtime.
-		let mut runtime_api = client.runtime_api();
-		runtime_api
-			.register_extension(offchain_tx_pool_factory.offchain_transaction_pool(best_hash));
-
-		let err = match runtime_api.submit_tickets_unsigned_extrinsic(best_hash, tickets) {
-			Err(err) => Some(err.to_string()),
-			Ok(false) => Some("Unknown reason".to_string()),
-			_ => None,
-		};
-
-		match err {
-			None => {
-				// Cache tickets secret in the epoch changes tree
-				// TODO @davxy: use the keystre
-				epoch_changes
-					.shared_data()
-					.epoch_mut(&epoch_identifier)
-					.map(|target_epoch| target_epoch.tickets_aux = epoch.tickets_aux);
-			},
-			Some(err) => {
-				error!(target: LOG_TARGET, "Unable to submit tickets: {}", err);
-			},
-		}
+		// TODO: submit tickets to a message queue which:
+		// 1. ends up being accumulated locally
+		// 2. ends up gossiping the tickets
+		info!(target: LOG_TARGET, "Generated {} tickets", tickets.len());
 	}
 }
 
@@ -554,8 +528,6 @@ pub struct SassafrasWorkerParams<B: BlockT, C, SC, EN, I, SO, L, CIDP> {
 	pub force_authoring: bool,
 	/// State shared between import queue and authoring worker.
 	pub sassafras_link: SassafrasLink<B>,
-	/// The offchain transaction pool factory used for tickets submission.
-	pub offchain_tx_pool_factory: OffchainTransactionPoolFactory<B>,
 }
 
 /// Start the Sassafras worker.
@@ -571,7 +543,6 @@ pub fn start_sassafras<B, C, SC, EN, I, SO, CIDP, L, ER>(
 		create_inherent_data_providers,
 		force_authoring,
 		sassafras_link,
-		offchain_tx_pool_factory,
 	}: SassafrasWorkerParams<B, C, SC, EN, I, SO, L, CIDP>,
 ) -> Result<SassafrasWorker<B>, ConsensusError>
 where
@@ -627,7 +598,6 @@ where
 		keystore,
 		sassafras_link.epoch_changes.clone(),
 		select_chain,
-		offchain_tx_pool_factory,
 	);
 
 	let inner = future::select(Box::pin(slot_worker), Box::pin(tickets_worker));

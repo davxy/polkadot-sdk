@@ -32,6 +32,7 @@ use std::{
 	time::Duration,
 };
 
+use codec::{Decode, Encode};
 use futures::{
 	channel::mpsc::{channel, Receiver, Sender},
 	prelude::*,
@@ -39,7 +40,6 @@ use futures::{
 use log::{debug, error, info, log, trace, warn};
 use parking_lot::Mutex;
 use prometheus_endpoint::Registry;
-use scale_codec::{Decode, Encode};
 
 use sc_client_api::{backend::AuxStore, BlockchainEvents, ProvideUncles, UsageProvider};
 use sc_consensus::{
@@ -76,9 +76,8 @@ use sp_runtime::{
 // Re-export some primitives.
 pub use sp_consensus_sassafras::{
 	digests::{ConsensusLog, NextEpochDescriptor, SlotClaim},
-	vrf, AuthorityId, AuthorityIndex, AuthorityPair, AuthoritySignature, EpochConfiguration,
-	SassafrasApi, TicketBody, TicketClaim, TicketEnvelope, TicketId, RANDOMNESS_LENGTH,
-	SASSAFRAS_ENGINE_ID,
+	vrf, AuthorityId, AuthorityIndex, AuthorityPair, AuthoritySignature, SassafrasApi, TicketBody,
+	TicketEnvelope, TicketId, RANDOMNESS_LENGTH, SASSAFRAS_ENGINE_ID,
 };
 
 mod authorship;
@@ -206,7 +205,7 @@ pub struct TicketSecret {
 #[derive(Debug, Clone, Encode, Decode, PartialEq)]
 pub struct Epoch {
 	pub(crate) inner: sp_consensus_sassafras::Epoch,
-	pub(crate) tickets_aux: BTreeMap<TicketId, (AuthorityIndex, TicketSecret)>,
+	// pub(crate) tickets_aux: BTreeMap<TicketId, (AuthorityIndex, TicketSecret)>,
 }
 
 use std::ops::{Deref, DerefMut};
@@ -227,7 +226,7 @@ impl DerefMut for Epoch {
 
 impl From<sp_consensus_sassafras::Epoch> for Epoch {
 	fn from(epoch: sp_consensus_sassafras::Epoch) -> Self {
-		Epoch { inner: epoch, tickets_aux: Default::default() }
+		Epoch { inner: epoch }
 	}
 }
 
@@ -237,12 +236,10 @@ impl EpochT for Epoch {
 
 	fn increment(&self, descriptor: NextEpochDescriptor) -> Epoch {
 		sp_consensus_sassafras::Epoch {
-			index: self.index + 1,
-			start: self.start + self.length as u64,
-			length: self.length,
+			start: self.start + self.config.epoch_duration as u64,
 			authorities: descriptor.authorities,
-			randomness: descriptor.randomness,
-			config: descriptor.config.unwrap_or(self.config),
+			randomness: self.randomness,
+			config: self.config,
 		}
 		.into()
 	}
@@ -252,7 +249,7 @@ impl EpochT for Epoch {
 	}
 
 	fn end_slot(&self) -> Slot {
-		self.start + self.length as u64
+		self.start + self.config.epoch_duration as u64
 	}
 }
 
@@ -261,7 +258,6 @@ impl Epoch {
 	/// the first block, so that has to be provided.
 	pub fn genesis(config: &Epoch, slot: Slot) -> Epoch {
 		let mut epoch = config.clone();
-		epoch.index = 0;
 		epoch.start = slot;
 		epoch
 	}
@@ -289,6 +285,8 @@ where
 pub struct SassafrasIntermediate<B: BlockT> {
 	/// The epoch descriptor.
 	pub epoch_descriptor: ViableEpochDescriptor<B::Hash, NumberFor<B>, Epoch>,
+	/// If the block is claimed using primary method (ticket).
+	pub is_primary: bool,
 }
 
 /// Extract the Sassafras slot claim from the given header.
@@ -297,14 +295,13 @@ pub struct SassafrasIntermediate<B: BlockT> {
 fn find_slot_claim<B: BlockT>(header: &B::Header) -> Result<SlotClaim, Error<B>> {
 	if header.number().is_zero() {
 		// Genesis block doesn't contain a slot-claim so let's generate a
-		// dummy one jyst to not break any invariant in the rest of the code.
+		// dummy one just to maintain the invariant.
 		use sp_core::crypto::VrfSecret;
 		let pair = sp_consensus_sassafras::AuthorityPair::from_seed(&[0u8; 32]);
-		let data = vrf::slot_claim_sign_data(&Default::default(), 0.into(), 0);
+		let data = vrf::block_randomness_sign_data(Default::default());
 		return Ok(SlotClaim {
 			authority_idx: 0,
 			slot: 0.into(),
-			ticket_claim: None,
 			vrf_signature: pair.as_ref().vrf_sign(&data),
 		})
 	}

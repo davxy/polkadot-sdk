@@ -912,9 +912,6 @@ async fn sassafras_network_progress() {
 			justification_sync_link: (),
 			force_authoring: false,
 			create_inherent_data_providers,
-			offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(
-				RejectAllTxPool::default(),
-			),
 		};
 		let sassafras_worker = start_sassafras(sassafras_params).unwrap();
 		sassafras_workers.push(sassafras_worker);

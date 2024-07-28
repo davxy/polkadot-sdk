@@ -18,7 +18,6 @@
 //! Utilities related to VRF input, pre-output and signatures.
 
 use crate::{Randomness, TicketId};
-use sp_consensus_slots::Slot;
 
 pub use sp_core::bandersnatch::{
 	ring_vrf::{RingProver, RingVerifier, RingVerifierKey, RingVrfSignature},
@@ -36,7 +35,7 @@ const BLOCK_ENTROPY_CONTEXT: &[u8] = b"sassafras_entropy";
 pub type RingContext = sp_core::bandersnatch::ring_vrf::RingContext<RING_VRF_DOMAIN_SIZE>;
 
 /// VRF input to generate the ticket id.
-pub fn ticket_id_input(randomness: &Randomness, attempt: u8) -> VrfInput {
+pub fn ticket_id_input(randomness: Randomness, attempt: u8) -> VrfInput {
 	VrfInput::new(b"sassafras", [TICKET_SEAL_CONTEXT, randomness.as_slice(), &[attempt]].concat())
 }
 
@@ -50,17 +49,14 @@ pub fn ticket_id_sign_data(ticket_id_input: VrfInput, extra_data: &[u8]) -> VrfS
 }
 
 /// VRF input to produce randomness.
-pub fn block_randomness_input(randomness: &Randomness, slot: Slot) -> VrfInput {
+pub fn block_randomness_input(randomness: Randomness) -> VrfInput {
 	// TODO: @davxy: implement as JAM
-	VrfInput::new(
-		b"sassafras",
-		[BLOCK_ENTROPY_CONTEXT, randomness.as_slice(), &slot.to_le_bytes()].concat(),
-	)
+	VrfInput::new(b"sassafras", [BLOCK_ENTROPY_CONTEXT, randomness.as_slice()].concat())
 }
 
 /// Signing-data to claim slot ownership during block production.
-pub fn block_randomness_sign_data(randomness: &Randomness, slot: Slot) -> VrfSignData {
-	let input = block_randomness_input(randomness, slot);
+pub fn block_randomness_sign_data(randomness: Randomness) -> VrfSignData {
+	let input = block_randomness_input(randomness);
 	VrfSignData::new_unchecked(
 		b"sassafras-randomness-transcript",
 		Option::<&[u8]>::None,

@@ -152,11 +152,12 @@ where
 
 		if viable_epoch.as_ref().end_slot() <= slot {
 			// Some epochs must have been skipped as our current slot fits outside the
-			// current epoch. We will figure out which is the first skipped epoch and we
+			// expected epoch. We will figure out which is the first skipped epoch and we
 			// will partially re-use its data for this "recovery" epoch.
 			let epoch_data = viable_epoch.as_mut();
-			let skipped_epochs = (*slot - *epoch_data.start) / epoch_data.length as u64;
-			let original_epoch_idx = epoch_data.index;
+			let epoch_duration = epoch_data.config.epoch_duration as u64;
+			let skipped_epochs = (*slot - *epoch_data.start) / epoch_duration;
+			let original_epoch_idx = *epoch_data.start / epoch_duration;
 
 			// NOTE: notice that we are only updating a local copy of the `Epoch`, this
 			// makes it so that when we insert the next epoch into `EpochChanges` below
@@ -167,22 +168,19 @@ where
 			// which epoch to use for a given slot, we will search in-depth with the
 			// predicate `epoch.start_slot <= slot` which will still match correctly without
 			// requiring to update `start_slot` to the correct value.
-			epoch_data.index += skipped_epochs;
-			epoch_data.start =
-				Slot::from(*epoch_data.start + skipped_epochs * epoch_data.length as u64);
+			epoch_data.start = Slot::from(*epoch_data.start + skipped_epochs * epoch_duration);
 			warn!(
 				target: LOG_TARGET,
 				"Epoch(s) skipped from {} to {}",
 				original_epoch_idx,
-				epoch_data.index
+				*slot / epoch_duration
 			);
 		}
 
 		log!(
 			target: LOG_TARGET,
 			log_level,
-			"New epoch {} launching at block {} (block slot {} >= start slot {}).",
-			viable_epoch.as_ref().index,
+			"New epoch launching at block {} (block slot {} >= start slot {}).",
 			hash,
 			slot,
 			viable_epoch.as_ref().start,
@@ -348,9 +346,9 @@ where
 			return self.import_state(block).await
 		}
 
-		let viable_epoch_desc = block
-			.remove_intermediate::<SassafrasIntermediate<Block>>(INTERMEDIATE_KEY)?
-			.epoch_descriptor;
+		let intermediate_data =
+			block.remove_intermediate::<SassafrasIntermediate<Block>>(INTERMEDIATE_KEY)?;
+		let viable_epoch_desc = intermediate_data.epoch_descriptor;
 
 		let claim = find_slot_claim::<Block>(&block.header)
 			.map_err(|e| ConsensusError::ClientImport(e.into()))?;
@@ -409,7 +407,7 @@ where
 				)
 			})?;
 
-		let total_weight = parent_weight + claim.ticket_claim.is_some() as u32;
+		let total_weight = parent_weight + intermediate_data.is_primary as u32;
 
 		aux_schema::write_block_weight(hash, total_weight, |values| {
 			block
@@ -456,7 +454,7 @@ where
 	}
 
 	async fn check_block(
-		&mut self,
+		&self,
 		block: BlockCheckParams<Block>,
 	) -> Result<ImportResult, Self::Error> {
 		self.inner.check_block(block).await.map_err(Into::into)

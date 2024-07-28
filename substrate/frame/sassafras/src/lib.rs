@@ -840,7 +840,9 @@ impl<T: Config> Pallet<T> {
 		Epoch {
 			start: Self::current_epoch_start(),
 			authorities: Self::authorities().into_inner(),
-			randomness: Self::randomness_buf(),
+			// TODO: double check if [2] or [3]
+			randomness: Self::randomness_buf()[2],
+			config: Self::protocol_config(),
 		}
 	}
 

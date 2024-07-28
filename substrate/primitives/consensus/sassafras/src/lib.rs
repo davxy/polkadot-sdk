@@ -126,10 +126,12 @@ pub struct Configuration {
 pub struct Epoch {
 	/// Starting slot of the epoch.
 	pub start: Slot,
-	/// Randomness accumulator.
-	pub randomness: [Randomness; 4],
+	/// Epoch randomness.
+	pub randomness: Randomness,
 	/// Authorities list.
 	pub authorities: Vec<AuthorityId>,
+	/// Epoch configuration.
+	pub config: Configuration,
 }
 
 /// An opaque type used to represent the key ownership proof at the runtime API boundary.
