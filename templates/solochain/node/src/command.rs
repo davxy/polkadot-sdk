@@ -117,7 +117,10 @@ pub fn run() -> sc_cli::Result<()> {
 							);
 						}
 
-						cmd.run_with_spec::<sp_runtime::traits::HashingFor<Block>, ()>(Some(
+						cmd.run_with_spec::<sp_runtime::traits::HashingFor<Block>, (
+							sp_crypto_ec_utils::bls12_381::host_calls::HostFunctions,
+							sp_crypto_ec_utils::ed_on_bls12_381_bandersnatch::host_calls::HostFunctions,
+						)>(Some(
 							config.chain_spec,
 						))
 					},

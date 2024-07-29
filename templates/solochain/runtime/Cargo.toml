@@ -28,6 +28,7 @@ frame-try-runtime = { optional = true, workspace = true }
 frame-executive = { workspace = true }
 
 # frame pallets
+pallet-sassafras = { path = "../../../substrate/frame/sassafras", default-features = false, features = ["construct-dummy-ring-context"] }
 pallet-aura = { workspace = true }
 pallet-balances = { workspace = true }
 pallet-grandpa = { workspace = true }
@@ -89,6 +90,7 @@ std = [
 	"frame-benchmarking?/std",
 	"frame-try-runtime?/std",
 
+	"pallet-sassafras/std",
 	"pallet-aura/std",
 	"pallet-balances/std",
 	"pallet-grandpa/std",
@@ -126,6 +128,7 @@ runtime-benchmarks = [
 	"pallet-template/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
+	"pallet-sassafras/runtime-benchmarks",
 ]
 
 try-runtime = [
@@ -133,6 +136,7 @@ try-runtime = [
 	"frame-support/try-runtime",
 	"frame-system/try-runtime",
 	"frame-try-runtime/try-runtime",
+	"pallet-sassafras/try-runtime",
 	"pallet-aura/try-runtime",
 	"pallet-balances/try-runtime",
 	"pallet-grandpa/try-runtime",

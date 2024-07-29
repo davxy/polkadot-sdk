@@ -13,7 +13,7 @@ use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
 	traits::{BlakeTwo256, Block as BlockT, IdentifyAccount, NumberFor, One, Verify},
 	transaction_validity::{TransactionSource, TransactionValidity},
-	ApplyExtrinsicResult, MultiSignature,
+	ApplyExtrinsicResult, MultiSignature, Percent,
 };
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
@@ -179,6 +179,21 @@ impl frame_system::Config for Runtime {
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
+parameter_types! {
+	pub const LotteryPercent: Percent = Percent::from_percent(85);
+}
+
+impl pallet_sassafras::Config for Runtime {
+	type EpochDuration = ConstU32<200>;
+	type MaxAuthorities = ConstU32<100>;
+	type RedundancyFactor = ConstU8<2>;
+	type AttemptsNumber = ConstU8<32>;
+	type TicketsChunkLength = ConstU32<16>;
+	type LotteryDurationPercent = LotteryPercent;
+	type EpochChangeTrigger = pallet_sassafras::EpochChangeInternalTrigger;
+	type WeightInfo = pallet_sassafras::weights::SubstrateWeight<Runtime>;
+}
+
 impl pallet_aura::Config for Runtime {
 	type AuthorityId = AuraId;
 	type DisabledValidators = ();
@@ -294,6 +309,9 @@ mod runtime {
 	// Include the custom logic from the pallet-template in the runtime.
 	#[runtime::pallet_index(7)]
 	pub type TemplateModule = pallet_template;
+
+	#[runtime::pallet_index(8)]
+	pub type Sassafras = pallet_sassafras;
 }
 
 /// The address format for describing accounts.
@@ -344,6 +362,7 @@ mod benches {
 		[pallet_timestamp, Timestamp]
 		[pallet_sudo, Sudo]
 		[pallet_template, TemplateModule]
+		[pallet_sassafras, Sassafras]
 	);
 }
 
